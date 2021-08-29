@@ -3,7 +3,7 @@ import numpy as np
 
 #Parameters
 n = 6               #number of nodes in P2P network
-z = 0.3             #probability that a node is slow
+z = 0.7             #probability that a node is fast
 p_edge = 0.3        #probability with which edge is drawn between two nodes
 seed = 102          #seed for random functions
 
@@ -78,7 +78,7 @@ def init_global_values():
                 c[i, j] = 100
             else:
                 c[i, j] = 5
-            d_mean[i, j] = 96/([c[i, j]]*1000)
+            d_mean[i, j] = 96/(c[i, j]*1000)
 
 
 def get_latency(i, j, m_size):
@@ -109,9 +109,10 @@ class Block:
                                             #  as sender is mining transaction ##
 
 class Node:
-  def __init__(self, alpha, is_fast):
-    self.alpha = alpha                # Fraction of Hashing Power
-    self.is_fast = is_fast                # Slow or Fast
+  def __init__(self):
+    self.alpha = 1/(800*n) + np.random.random()/(800*n)     # Fraction of Hashing Power
+                                                            #Selected uniformly from [1/800n, 1/400n]
+    self.is_fast = coin_flip(z)       # Slow or Fast
     self.blockchain = BlockChain()    # Blockchain -- tree of blocks
     self.unused = []                  # List of Unused transactions
     self.used = []                    # List of Used transactions
@@ -120,7 +121,7 @@ class Node:
 class BlockChain:
     def __init__(self):
         self.parent_info = {}                       # Dictionary of Block ID mapped to Parent Block ID
-        self.block_info = {-1 : Block(-1,-1,0,[])}  ## Dictionary of Block ID mapped to Block structure 
+        self.block_info = {-1 : Block(-1, -1, [])}  ## Dictionary of Block ID mapped to Block structure 
                                                     #  Initializing it with the genesis block by default ##
         self.block_depth = {}                       # Dictionary of Block ID mapped to its depth in the tree
         self.toa = {}                               # Dictionary of Block ID mapped to time of arrival
@@ -128,6 +129,10 @@ class BlockChain:
                                                     #  coins owned by Node till this Block ##
         self.mining_block = -1                      ## Block ID of the last block of the longest chain on 
                                                     #  which mining will take place ##
-            
-    
 
+    
+if __name__ == '__main__':
+    gen_graph()                 #graph is sampled
+    for i in range(n):          #node objects are assigned to each node id
+        nodes.append(Node())
+    init_global_values()        #parameters for calculating latency are assigned
