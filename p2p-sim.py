@@ -15,6 +15,8 @@ rho = {}            #stores speed of light propagation delay, accessed as rho[i,
 c = {}              #stores link speed, used as c[i,j]
 d_mean = {}         #stores mean of exponential dist for queuing delay, used as d_mean[i,j]
 nodes = []          #stores nodes of the network
+block_no = 0
+tnx_no = 0
 
 
 def coin_flip(p):
@@ -121,9 +123,9 @@ class Node:
 class BlockChain:
     def __init__(self):
         self.parent_info = {}                       # Dictionary of Block ID mapped to Parent Block ID
-        self.block_info = {-1 : Block(-1, -1, [])}  ## Dictionary of Block ID mapped to Block structure 
+        self.block_info = {-1 : Block(blkID=-1, parent_blkID=-1, txns=[])}      ## Dictionary of Block ID mapped to Block structure 
                                                     #  Initializing it with the genesis block by default ##
-        self.block_depth = {}                       # Dictionary of Block ID mapped to its depth in the tree
+        self.block_depth = {-1: 0}                       # Dictionary of Block ID mapped to its depth in the tree
         self.toa = {}                               # Dictionary of Block ID mapped to time of arrival
         self.node_coins = {}                        ## Dictionary of (Block ID, Node ID) mapped to number of  
                                                     #  coins owned by Node till this Block ##
