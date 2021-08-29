@@ -6,7 +6,8 @@ n = 6               #number of nodes in P2P network
 z = 0.7             #probability that a node is fast
 p_edge = 0.3        #probability with which edge is drawn between two nodes
 seed = 102          #seed for random functions
-
+Ttx = 120           #mean time for transaction generation
+total_sim_time = 10000      # total time the simulation will run
 
 np.random.seed(seed)
 
@@ -15,8 +16,10 @@ rho = {}            #stores speed of light propagation delay, accessed as rho[i,
 c = {}              #stores link speed, used as c[i,j]
 d_mean = {}         #stores mean of exponential dist for queuing delay, used as d_mean[i,j]
 nodes = []          #stores nodes of the network
-block_no = 0
-tnx_no = 0
+block_no = 0        #id for blocks
+txn_no = 0          #id for txns
+curr_time = 0       #current time in the simulation
+
 
 
 def coin_flip(p):
@@ -93,13 +96,57 @@ def get_latency(i, j, m_size):
     return latency
 
 
+
+# 0-> txn generation: event has sen=-1, rec = creator of txn
+# 1-> txn received: event has sen = sender of the event, rec = node that will forward
+# 2-> block generation
+# 3-> block received
+
+def gen_txn(curr_time):
+    """This generates random txn and adds to event queue"""
+    global txn_no
+    sen = np.random.randint(low=0, high=n)
+    rec = np.random.randint(low=0, high=n)
+    coins = 100*np.random.random()
+    next_time = np.random.exponential(Ttx) + curr_time
+    txn = Txn(txn_no, sen, rec, coins)
+    txn_no += 1
+    event_queue.add_event(next_time, Event(0, sender=-1, rec=sen, txn = txn, blk = None))
+    return 
+
+
 # Structs
+class Event_Queue:
+    def __init__(self):
+        self.queue = []
+    
+    def add_event(self, time, event):
+        index = len(self.queue)
+        for i in range(len(self.queue)):
+            (t, _) = self.queue[i]
+            if(t>time):
+                index = i
+                break
+        new_queue = self.queue[:index] + [(time, event)] + self.queue[index:]
+        self.queue = new_queue
+
+    def execute_event_queue(self):
+        while(len(self.queue)):
+            (t, e) = self.queue[0]
+            self.queue = self.queue[1:]
+            if(t > total_sim_time):
+                return
+            e.execute()
+
+
 class Txn:
-    def __init__(self, sender, receiver, amount):
+    def __init__(self, txnID, sender, receiver, amount):
+        self.txnID = txnID
         self.sender = sender                ## Node ID of the sender -- if == -1 
                                             # this is a mining transaction ##
         self.receiver = receiver            # Node ID of the receiver
         self.amount = amount                # amount of bitcoins being transferred
+
 
 class Block:
     def __init__(self, blkID, parent_blkID, txns):
@@ -118,6 +165,8 @@ class Node:
     self.blockchain = BlockChain()    # Blockchain -- tree of blocks
     self.unused = []                  # List of Unused transactions
     self.used = []                    # List of Used transactions
+    self.rec_txn = {}                 # Dict of txn to sender
+    self.rec_blk = {}                 # Dict of blk to sender
 
 
 class BlockChain:
@@ -132,6 +181,51 @@ class BlockChain:
         self.mining_block = -1                      ## Block ID of the last block of the longest chain on 
                                                     #  which mining will take place ##
 
+
+event_queue = Event_Queue()
+
+
+class Event:
+    def __init__(self, type, sender, rec, txn=None, blk=None):
+        self.type = type
+        self.txn = txn
+        self.blk = blk
+        self.sender = sender
+        self.rec = rec
+
+    def execute(self):
+        sen = self.sender
+        rec = self.rec
+        if(self.type == 0):
+            # add receive txn event for peers of sender
+            
+            nodes[rec].rec_txn[self.txn.txnID] = -1
+            #TODO: add to unused list
+            # nodes[rec].unused.append(self.txn.txnID)
+
+            for peer in peers[rec]:
+                event_queue.add_event(
+                    curr_time + get_latency(rec, peer, 8), Event(1, rec, peer, self.txn))
+            # generate new
+            gen_txn(curr_time)
+        elif(self.type == 1):
+            if(nodes[rec].rec_txn.has_key(self.txn.txnID)):
+                return
+            nodes[rec].rec_txn[self.txn.txnID] = sen
+            #TODO: add to unused list, consider if a block containing txn has already been received 
+            # nodes[rec].unused
+
+            for peer in peers[rec]:
+                if(peer == sen):
+                    continue
+                else:
+                    event_queue.add_event(
+                        curr_time + get_latency(rec, peer, 8), Event(1, rec, peer, self.txn))
+        elif(self.type == 2):
+            pass
+        else: #block received
+            pass
+            
     
 if __name__ == '__main__':
     gen_graph()                 #graph is sampled
