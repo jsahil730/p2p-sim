@@ -7,44 +7,6 @@ z = 0.3             #probability that a node is slow
 p_edge = 0.3        #probability with which edge is drawn between two nodes
 seed = 102          #seed for random functions
 
-# Structs
-class Txn:
-    def __init__(self, sender, receiver, amount):
-        self.sender = sender                ## Node ID of the sender -- if == -1 
-                                            # this is a mining transaction ##
-        self.receiver = receiver            # Node ID of the receiver
-        self.amount = amount                # amount of bitcoins being transferred
-
-class Block:
-    def __init__(self, blkID, parent_blkID, size, txns):
-        self.blkID = blkID                  # Block ID
-        self.parent_blkID = parent_blkID    # Parent Block ID
-        self.size = size                    # Size of the Block
-        self.txns = txns                    ## List of transactions --
-                                            #  one transaction having "-1" 
-                                            #  as sender is mining transaction ##
-
-class Node:
-  def __init__(self, alpha, label):
-    self.alpha = alpha                # Fraction of Hashing Power
-    self.label = label                # Slow or Fast
-    self.blockchain = BlockChain()    # Blockchain -- tree of blocks
-    self.unused = []                  # List of Unused transactions
-    self.used = []                    # List of Used transactions
-
-
-class BlockChain:
-    def __init__(self):
-        self.parent_info = {}                       # Dictionary of Block ID mapped to Parent Block ID
-        self.block_info = {-1 : Block(-1,-1,0,[])}  ## Dictionary of Block ID mapped to Block structure 
-                                                    #  Initializing it with the genesis block by default ##
-        self.block_depth = {}                       # Dictionary of Block ID mapped to its depth in the tree
-        self.toa = {}                               # Dictionary of Block ID mapped to time of arrival
-        self.node_coins = {}                        ## Dictionary of (Block ID, Node ID) mapped to number of  
-                                                    #  coins owned by Node till this Block ##
-        self.mining_block = -1                      ## Block ID of the last block of the longest chain on 
-                                                    #  which mining will take place ##
-            
 
 np.random.seed(seed)
 
@@ -54,6 +16,7 @@ c = {}              #stores link speed, used as c[i,j]
 d_mean = {}         #stores mean of exponential dist for queuing delay, used as d_mean[i,j]
 nodes = []          #stores nodes of the network
 
+
 def coin_flip(p):
     """Generates 1 with p probabilty"""
     rand_num = np.random.random()
@@ -62,12 +25,14 @@ def coin_flip(p):
     else:
         return 0
 
+
 def connect_dfs(i, visited):
     """Performs dfs on node i"""
     visited[i] = True
     for j in peers[i]:
         if(not visited[j]):
             connect_dfs(j, visited)
+
 
 def gen_graph():
     """
@@ -95,6 +60,7 @@ def gen_graph():
         peers[roots[i]].append(roots[i+1])
         peers[roots[i+1]].append(roots[i])
 
+
 def print_graph():
     """Prints adjacency list"""
     for i in range(n):
@@ -103,22 +69,65 @@ def print_graph():
             print(j, ' ', end='')
         print()
 
+
 def init_global_values():
     for i in range(n):
         for j in peers[i]:
-            rho[i,j] = (10 + 490*np.random.random())/1000
+            rho[i, j] = (10 + 490*np.random.random())/1000
             if(nodes[i].is_fast and nodes[j].is_fast):
-                c[i,j] = 100
+                c[i, j] = 100
             else:
-                c[i,j] = 5
-            d_mean[i,j] = 96/([c[i,j]]*1000)
+                c[i, j] = 5
+            d_mean[i, j] = 96/([c[i, j]]*1000)
+
 
 def get_latency(i, j, m_size):
     """
     Calculate latency in sending message of size m_size from note i to j
     m_size is in kbits
     """
-    latency = rho[i,j] + m_size/(c[i,j]*1000)+ np.random.exponential(d_mean[i,j])
+    latency = rho[i, j] + m_size / \
+        (c[i, j]*1000) + np.random.exponential(d_mean[i, j])
     return latency
+
+
+# Structs
+class Txn:
+    def __init__(self, sender, receiver, amount):
+        self.sender = sender                ## Node ID of the sender -- if == -1 
+                                            # this is a mining transaction ##
+        self.receiver = receiver            # Node ID of the receiver
+        self.amount = amount                # amount of bitcoins being transferred
+
+class Block:
+    def __init__(self, blkID, parent_blkID, size, txns):
+        self.blkID = blkID                  # Block ID
+        self.parent_blkID = parent_blkID    # Parent Block ID
+        self.size = size                    # Size of the Block
+        self.txns = txns                    ## List of transactions --
+                                            #  one transaction having "-1" 
+                                            #  as sender is mining transaction ##
+
+class Node:
+  def __init__(self, alpha, is_fast):
+    self.alpha = alpha                # Fraction of Hashing Power
+    self.is_fast = is_fast                # Slow or Fast
+    self.blockchain = BlockChain()    # Blockchain -- tree of blocks
+    self.unused = []                  # List of Unused transactions
+    self.used = []                    # List of Used transactions
+
+
+class BlockChain:
+    def __init__(self):
+        self.parent_info = {}                       # Dictionary of Block ID mapped to Parent Block ID
+        self.block_info = {-1 : Block(-1,-1,0,[])}  ## Dictionary of Block ID mapped to Block structure 
+                                                    #  Initializing it with the genesis block by default ##
+        self.block_depth = {}                       # Dictionary of Block ID mapped to its depth in the tree
+        self.toa = {}                               # Dictionary of Block ID mapped to time of arrival
+        self.node_coins = {}                        ## Dictionary of (Block ID, Node ID) mapped to number of  
+                                                    #  coins owned by Node till this Block ##
+        self.mining_block = -1                      ## Block ID of the last block of the longest chain on 
+                                                    #  which mining will take place ##
+            
     
 
