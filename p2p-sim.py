@@ -7,6 +7,45 @@ z = 0.3             #probability that a node is slow
 p_edge = 0.3        #probability with which edge is drawn between two nodes
 seed = 102          #seed for random functions
 
+# Structs
+class Txn:
+    def __init__(self, sender, receiver, amount):
+        self.sender = sender                ## Node ID of the sender -- if == -1 
+                                            # this is a mining transaction ##
+        self.receiver = receiver            # Node ID of the receiver
+        self.amount = amount                # amount of bitcoins being transferred
+
+class Block:
+    def __init__(self, blkID, parent_blkID, size, txns):
+        self.blkID = blkID                  # Block ID
+        self.parent_blkID = parent_blkID    # Parent Block ID
+        self.size = size                    # Size of the Block
+        self.txns = txns                    ## List of transactions --
+                                            #  one transaction having "-1" 
+                                            #  as sender is mining transaction ##
+
+class Node:
+  def __init__(self, alpha, label):
+    self.alpha = alpha                # Fraction of Hashing Power
+    self.label = label                # Slow or Fast
+    self.blockchain = BlockChain()    # Blockchain -- tree of blocks
+    self.unused = []                  # List of Unused transactions
+    self.used = []                    # List of Used transactions
+
+
+class BlockChain:
+    def __init__(self):
+        self.parent_info = {}                       # Dictionary of Block ID mapped to Parent Block ID
+        self.block_info = {-1 : Block(-1,-1,0,[])}  ## Dictionary of Block ID mapped to Block structure 
+                                                    #  Initializing it with the genesis block by default ##
+        self.block_depth = {}                       # Dictionary of Block ID mapped to its depth in the tree
+        self.toa = {}                               # Dictionary of Block ID mapped to time of arrival
+        self.node_coins = {}                        ## Dictionary of (Block ID, Node ID) mapped to number of  
+                                                    #  coins owned by Node till this Block ##
+        self.mining_block = -1                      ## Block ID of the last block of the longest chain on 
+                                                    #  which mining will take place ##
+            
+
 np.random.seed(seed)
 
 peers = {}          #will store adjacency lists, it is a dictionary of lists
