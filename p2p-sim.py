@@ -100,10 +100,10 @@ class Txn:
         self.amount = amount                # amount of bitcoins being transferred
 
 class Block:
-    def __init__(self, blkID, parent_blkID, size, txns):
+    def __init__(self, blkID, parent_blkID, txns):
         self.blkID = blkID                  # Block ID
         self.parent_blkID = parent_blkID    # Parent Block ID
-        self.size = size                    # Size of the Block
+        self.size = len(txns)*8             # Size of the Block in kbits
         self.txns = txns                    ## List of transactions --
                                             #  one transaction having "-1" 
                                             #  as sender is mining transaction ##
