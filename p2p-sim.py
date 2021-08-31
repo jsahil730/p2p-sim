@@ -15,6 +15,12 @@ class Event_type(Enum):
     rec_txn = 1
     gen_blk = 2
     rec_blk = 3
+    broadcast_invalid_block = 4
+
+#constants
+MINING_FEES = 50
+MINING_FEE_SENDER = -1
+MAX_TXN_NUM = 1000
 
 np.random.seed(seed)
 
@@ -103,7 +109,7 @@ def get_latency(i, j, m_size):
     return latency
 
 
-def gen_txn(curr_time):
+def gen_txn():
     """This generates random txn and adds to event queue"""
     global txn_no
     sen = np.random.randint(low=0, high=n)
@@ -115,6 +121,26 @@ def gen_txn(curr_time):
     event_queue.add_event(next_time, Event(Event_type.gen_txn, sender=-1, rec=sen, txn = txn, blk = None))
     return 
 
+def gen_valid_blk(nodeID):
+    global block_no
+    txns = []
+    txns.append(Txn(txn_no, MINING_FEE_SENDER, nodeID, MINING_FEES))
+    txn_pool = nodes[nodeID].unused
+    curr_longest_block = nodes[nodeID].blockchain.mining_block
+    balance = {}
+    for i in range(n):
+        balance[i] = nodes[nodeID].blockchain.node_coins[curr_longest_block, i]
+    for k in txn_pool.keys():
+        if(len(txns) > MAX_TXN_NUM):
+            break
+        if(txn_pool[k].amount <= balance[txn_pool[k].sender]):
+            txns.append(txn_pool[k])
+            balance[txn_pool[k].sender] -= txn_pool[k].amount
+            balance[txn_pool[k].receiver] += txn_pool[k].amount
+    next_time = curr_time + np.random.exponential(nodes[nodeID].alpha)
+    new_blk = Block(block_no, curr_longest_block, txns)
+    block_no+= 1
+    event_queue.add_event(next_time, Event(Event_type.gen_blk, -1, nodeID, txn= None, blk= new_blk))
 
 # Structs
 class Event_Queue:
@@ -166,27 +192,48 @@ class Block:
 
 class Node:
   def __init__(self):
-    self.alpha = 1/(800*n) + np.random.random()/(800*n)     # Fraction of Hashing Power
-                                                            #Selected uniformly from [1/800n, 1/400n]
+    self.alpha = 400*n + np.random.random()*(400*n)     #Average Mining time
+                                                        #Selected uniformly from [400n, 800n]
     self.is_fast = coin_flip(z)       # Slow or Fast
     self.blockchain = BlockChain()    # Blockchain -- tree of blocks
-    self.unused = []                  # List of Unused transactions
-    self.used = []                    # List of Used transactions
+    self.unused = {}                  # List of Unused transactions
+    self.used = {}                    # List of Used transactions
     self.rec_txn = {}                 # Dict of txn to sender
     self.rec_blk = {}                 # Dict of blk to sender
 
 
 class BlockChain:
     def __init__(self):
-        self.parent_info = {}                       # Dictionary of Block ID mapped to Parent Block ID
         self.block_info = {-1 : Block(blkID=-1, parent_blkID=-1, txns=[])}      ## Dictionary of Block ID mapped to Block structure 
                                                     #  Initializing it with the genesis block by default ##
         self.block_depth = {-1: 0}                       # Dictionary of Block ID mapped to its depth in the tree
         self.toa = {}                               # Dictionary of Block ID mapped to time of arrival
         self.node_coins = {}                        ## Dictionary of (Block ID, Node ID) mapped to number of  
                                                     #  coins owned by Node till this Block ##
+        for i in range(n):
+            self.node_coins[-1, i] = 0
         self.mining_block = -1                      ## Block ID of the last block of the longest chain on 
                                                     #  which mining will take place ##
+        self.orphans = []                           # blocks whose parents are not in the blockchain
+
+    def add_block(self, blk):
+        #check if incoming block's parent is in node's blockchain
+        if(blk.parent_blkID in self.block_info):
+            self.block_info[blk.blkID] = blk
+            self.block_depth[blk.blkID] = 1 + self.block_depth[blk.parent_blkID]
+            self.toa[blk.blkID] = curr_time
+            for i in range(n):
+                self.node_coins[blk.blkID, i] = self.node_coins[blk.parent_blkID, i]
+            for txn in blk.txns:
+                if(not (txn.sender == -1)):     # check that txn is not mining fees
+                    self.node_coins[blk.blkID, txn.sender] -= txn.amount
+                self.node_coins[blk.blkID, txn.receiver] += txn.amount
+            if(self.block_depth[blk.blkID] > self.block_depth[self.mining_block]):
+                self.mining_block = blk.blk_ID
+
+            #TODO: check for orphan in the orphan list in the node
+        else:
+            pass
 
 
 event_queue = Event_Queue()
@@ -211,8 +258,8 @@ class Event:
             #store the sender of the event as -1
             nodes[rec].rec_txn[self.txn.txnID] = -1
 
-            #TODO: add to unused list
-            # nodes[rec].unused.append(self.txn.txnID)
+            # add txn to unused map
+            nodes[rec].unused[self.txn.txnID] = self.txn
 
             # add receive txn event for peers of sender
             msg_size = 8  # in kbits
@@ -220,7 +267,7 @@ class Event:
                 event_queue.add_event(
                     curr_time + get_latency(rec, peer, msg_size), Event(Event_type.rec_txn, rec, peer, self.txn))
             # generate new txn
-            gen_txn(curr_time)
+            gen_txn()
         elif(self.type == Event_type.rec_txn):
 
             # for testing txn frowarding
@@ -233,8 +280,9 @@ class Event:
             #store in the node the sender of txn
             nodes[rec].rec_txn[self.txn.txnID] = sen
 
-            #TODO: add to unused list, consider if a block containing txn has already been received 
-            # nodes[rec].unused
+            # add to unused list
+            if((self.txn.txnID not in nodes[rec].unused) and (self.txn.txnID not in nodes[rec].used)):
+                nodes[rec].unused[self.txn.txnID] = self.txn
 
             #forward to all peers except for the sender
             msg_size = 8  # in kbits
@@ -245,7 +293,35 @@ class Event:
                     event_queue.add_event(
                         curr_time + get_latency(rec, peer, 8), Event(Event_type.rec_txn, rec, peer, self.txn))
         elif(self.type == Event_type.gen_blk):
-            pass
+            # mark txns in the mined block as used, TODO: recheck this part
+            for txn in self.blk.txns:
+                if(txn.sender == -1):
+                    continue
+                nodes[rec].unused.pop(txn.txnID)
+                nodes[rec].used[txn.txnID] = txn
+
+            
+
+            # check if longest chain block is parent of block in the event
+            if(nodes[rec].blockchain.mining_block == self.blk.parent_blkID):
+                #add block to node's blockchain
+                nodes[rec].blockchain.add_block(self.blk)
+
+                #broadcast the new block
+                for peer in peers[rec]:
+                    event_queue.add_event(curr_time+ get_latency(rec, peer, self.blk.size), 
+                        Event(Event_type.rec_blk, rec, peer, txn= None, blk=self.blk))
+
+                #create a new mining event, make sure to mine valid block
+                if(True): #TODO: check for creating an invalid block 
+                    gen_valid_blk(rec)
+                else:
+                    pass
+        elif(self.type == Event_type.broadcast_invalid_block):
+            #TODO: should rec generate a valid block here?
+            for peer in peers[rec]:
+                event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
+                                      Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
         else: #block received event
             pass
             
