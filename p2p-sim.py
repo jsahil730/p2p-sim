@@ -1,15 +1,17 @@
-# import sys
+import sys
 import numpy as np
 from enum import Enum
 from termcolor import colored
+import time
 
 # Parameters
-n = 6  # number of nodes in P2P network
+n = 100  # number of nodes in P2P network
 z = 0.7  # probability that a node is fast
 p_edge = 0.3  # probability with which edge is drawn between two nodes
 seed = 102  # seed for random functions
-Ttx = 60  # mean time for transaction generation
-total_sim_time = 5000    # total time the simulation will run
+Ttx = 30  # mean time for transaction generation
+total_sim_time = 1000    # total time the simulation will run
+compile_time = time.time()
 
 
 class Event_type(Enum):
@@ -185,7 +187,10 @@ class Txn:
 
     def __repr__(self):
         """Returns the txn in string format"""
-        return f"TxnID: {self.txnID}; Node {self.sender} -> Node {self.receiver}, {self.amount} coins"
+        if (self.sender == MINING_FEE_SENDER):
+            return f"TxnID: {self.txnID}; Node {self.receiver} mined, {self.amount} coins"
+        else:
+            return f"TxnID: {self.txnID}; Node {self.sender} -> Node {self.receiver}, {self.amount} coins"
 
 
 class Block:
@@ -198,12 +203,20 @@ class Block:
         #  as sender is mining transaction ##
 
     def __repr__(self):
+
         return f"BlkID: {self.blkID}; Parent : {self.parent_blkID}; Txns : {self.txns}"
+
+    def log_data(self, toa=None):
+        if (self.blkID == -1):
+            return f"<genesis block hash>,N/A,N/A"
+        else:
+            return f"{self.blkID},{'' if toa is None else time.asctime(time.gmtime(toa))},{self.parent_blkID if self.parent_blkID != -1 else '<genesis block hash>'}"
+
 
 class Node:
     def __init__(self):
-        self.alpha = 400*n + np.random.random()*(400*n)  # Average Mining time
-        # Selected uniformly from [400n, 800n]
+        self.alpha = 120 + np.random.random()*(180)  # Average Mining time
+        # Selected uniformly from [120,300]
         self.is_fast = False       # Slow or Fast
         self.blockchain = BlockChain()    # Blockchain -- tree of blocks
         self.unused = {}                  # List of Unused transactions
@@ -299,7 +312,8 @@ class Event:
         if(self.type == Event_type.gen_txn):
 
             # for testing txn frowarding
-            # print(f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}")
+            print(
+                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}", file=sys.stderr)
 
             # store the sender of the event as -1
             nodes[rec].rec_txn[self.txn.txnID] = -1
@@ -317,7 +331,8 @@ class Event:
         elif(self.type == Event_type.rec_txn):
 
             # for testing txn frowarding
-            # print(f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}")
+            print(
+                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}", file=sys.stderr)
 
             if(self.txn.txnID in nodes[rec].rec_txn):
                 return
@@ -344,7 +359,8 @@ class Event:
                         curr_time + get_latency(rec, peer, 8), Event(Event_type.rec_txn, rec, peer, self.txn))
         elif(self.type == Event_type.gen_blk):
 
-            # print(f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} mined - {self.blk}")
+            print(
+                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} mined - {self.blk}", file=sys.stderr)
 
             # check if longest chain block is parent of block in the event
             # otherwise discard event
@@ -368,13 +384,14 @@ class Event:
                                           Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
                 # create a new mining event
-                if(block_no % INVALID_BLOCK_FREQ == 0):
+                if(False):
                     pass  # TODO:need to generate invalid block
                 else:
                     gen_valid_blk(rec)
             else:
                 pass
-                # print(colored(f"{curr_time:.2f} : Discarded bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}","red"))
+                print(colored(
+                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "red"), file=sys.stderr)
 
         # elif(self.type == Event_type.broadcast_invalid_block):
         #     #TODO: should rec generate a valid block here?
@@ -384,14 +401,16 @@ class Event:
         else:  # block received event
             # check if havent received it already, otherwise discard
 
-            # print(f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}")
+            print(
+                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
 
             if(self.blk.blkID in nodes[rec].rec_blk):
                 return
 
             # check if block is valid, otherise discard
             if(not nodes[rec].blockchain.check_valid_block(self.blk)):
-                # print(colored(f"{curr_time:.2f} : Discarded invalid received blk {self.blk.blkID} at Node {rec} - {self.blk}", "red"))
+                print(colored(
+                    f"{curr_time:.2f} : Discarded invalid received blk {self.blk.blkID} at Node {rec} - {self.blk}", "red"), file=sys.stderr)
                 return
 
             # add to received block map
@@ -444,6 +463,22 @@ class Event:
                 return
 
 
+def finish_simulation():
+    for i in range(len(nodes)):
+        l_log = []
+        with open(f"{i}.log", 'w') as f:
+            for id, blk in nodes[i].blockchain.block_info.items():
+                if (id == -1):
+                    continue  # genesis block
+                tm = None
+                if (blk.blkID in nodes[i].toa):
+                    tm = compile_time + nodes[i].toa[blk.blkID]
+                l_log.append((tm, blk.log_data(tm)))
+            for i in sorted(l_log):
+                f.write(i[1])
+                f.write("\n")
+
+
 if __name__ == '__main__':
     gen_graph()  # graph is sampled
     # print_graph()
@@ -457,3 +492,4 @@ if __name__ == '__main__':
     for i in range(n):
         gen_valid_blk(i)
     event_queue.execute_event_queue()
+    finish_simulation()
