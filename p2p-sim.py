@@ -1,6 +1,7 @@
-import sys
+# import sys
 import numpy as np
 from enum import Enum
+from termcolor import colored
 
 #Parameters
 n = 6               #number of nodes in P2P network
@@ -8,7 +9,7 @@ z = 0.7             #probability that a node is fast
 p_edge = 0.3        #probability with which edge is drawn between two nodes
 seed = 102          #seed for random functions
 Ttx = 60           #mean time for transaction generation
-total_sim_time = 1000    # total time the simulation will run
+total_sim_time = 5000    # total time the simulation will run
 
 class Event_type(Enum):
     gen_txn = 0
@@ -83,10 +84,7 @@ def gen_graph():
 def print_graph():
     """Prints adjacency list"""
     for i in range(n):
-        print(i, ': ', end='')
-        for j in peers[i]:
-            print(j, ' ', end='')
-        print()
+        print(f"{i} : {peers[i]}")
 
 
 def init_global_values():
@@ -360,6 +358,9 @@ class Event:
                     pass    #TODO:need to generate invalid block
                 else:
                     gen_valid_blk(rec)
+            else:
+                print(colored(f"Discarded bad mined blk {self.blk.blkID} at Node {rec} - {self.blk}","red"))
+
         # elif(self.type == Event_type.broadcast_invalid_block):
         #     #TODO: should rec generate a valid block here?
         #     for peer in peers[rec]:
@@ -375,6 +376,7 @@ class Event:
             
             # check if block is valid, otherise discard
             if(not nodes[rec].blockchain.check_valid_block(self.blk)):
+                print(colored(f"Discarded invalid received blk {self.blk.blkID} at Node {rec}","red"))
                 return
 
             # add to received block map
@@ -406,7 +408,7 @@ class Event:
                 new_mining_block = nodes[rec].blockchain.mining_block
                 # chain_changed = True # why this
                 iter = new_mining_block
-                while(iter != prev_mining_block or iter != -1):
+                while((iter != prev_mining_block) and (iter != -1)):
                     iter = nodes[rec].blockchain.block_info[iter].parent_blkID
                 
                 # chain extended, do nothing
