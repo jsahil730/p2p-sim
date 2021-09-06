@@ -8,12 +8,12 @@ import matplotlib.pyplot as plt
 from bisect import bisect
 
 # Parameters
-n = 10  # number of nodes in P2P network
+n = 100  # number of nodes in P2P network
 z = 0.7  # probability that a node is fast
 p_edge = 0.3  # probability with which edge is drawn between two nodes
 seed = 102  # seed for random functions
 Ttx = 30  # mean time for transaction generation
-total_sim_time = 10    # total time the simulation will run
+total_sim_time = 100    # total time the simulation will run
 compile_time = time.time()
 
 
@@ -161,7 +161,7 @@ class Event_Queue:
 
     def add_event(self, time, event):
         index = bisect(self.queue,(time,event))
-        self.queue.insert((time,event))
+        self.queue.insert(index,(time,event))
 
     def execute_event_queue(self):
         global curr_time
