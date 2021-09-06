@@ -8,12 +8,13 @@ import matplotlib.pyplot as plt
 from bisect import bisect
 
 # Parameters
-n = 100  # number of nodes in P2P network
+n = 10  # number of nodes in P2P network
 z = 0.7  # probability that a node is fast
 p_edge = 0.3  # probability with which edge is drawn between two nodes
+p_invalid = 0.5  # probability of each block being invalid
 seed = 102  # seed for random functions
 Ttx = 30  # mean time for transaction generation
-total_sim_time = 100    # total time the simulation will run
+total_sim_time = 1000    # total time the simulation will run
 compile_time = time.time()
 
 
@@ -140,6 +141,56 @@ def gen_valid_blk(nodeID):
     event_queue.add_event(next_time, Event(
         Event_type.gen_blk, -1, nodeID, txn=None, blk=new_blk))
 
+
+def should_blk_invalid(blkID):
+    return bool(np.random.binomial(1, p_invalid))
+
+def gen_invalid_blk(nodeID):
+    global block_no
+    txns = []
+    txns.append(Txn(txn_no, MINING_FEE_SENDER, nodeID, MINING_FEES))
+    txn_pool = nodes[nodeID].unused
+    chain = nodes[nodeID].blockchain.mining_block
+    balance = {}
+    for i in range(n):
+        balance[i] = nodes[nodeID].blockchain.node_coins[chain, i]
+    balance[nodeID] += MINING_FEES
+
+    # For invalid block, pick a single invalid txn
+    assert (MAX_TXN_NUM >= 2)
+    for k in txn_pool.keys():
+        # to ensure that the second txn makes someone's balance negative!
+        if (txn_pool[k].amount > balance[txn_pool[k].sender] and (txn_pool[k].sender != txn_pool[k].receiver)): 
+            txns.append(txn_pool[k])
+            balance[txn_pool[k].sender] -= txn_pool[k].amount
+            balance[txn_pool[k].receiver] += txn_pool[k].amount
+            break
+
+    # Was a bad txn available?
+    if (len(txns) >= 2):
+        assert any([balance[i] < 0 for i in range(n)])
+        next_time = curr_time + np.random.exponential(nodes[nodeID].alpha)
+        new_blk = Block(block_no, chain, txns)
+        block_no += 1
+
+        # A different event for broadcasting invalid block
+        event_queue.add_event(next_time, Event(
+            Event_type.broadcast_invalid_block, -1, nodeID, txn=None, blk=new_blk))
+        return True
+    else:
+        return False
+
+def print_balance(nodeID):
+    balance = {}
+    chain = nodes[nodeID].blockchain.mining_block
+    for i in range(n):
+        balance[i] = nodes[nodeID].blockchain.node_coins[chain,i]
+
+    print("Balance -> ")
+    for i in range(n):
+        print(f"\tNode {i} : {balance[i]} coins")
+
+
 # Structs
 
 
@@ -148,8 +199,8 @@ class Event_Queue:
         self.queue = []
 
     def add_event(self, time, event):
-        index = bisect(self.queue,(time,event))
-        self.queue.insert(index,(time,event))
+        index = bisect(self.queue, (time, event))
+        self.queue.insert(index, (time, event))
 
     def execute_event_queue(self):
         global curr_time
@@ -281,6 +332,7 @@ class BlockChain:
             balance[txn.receiver] += txn.amount
         return True
 
+
 class Event:
     def __init__(self, type, sender, rec, txn=None, blk=None):
         self.type = type
@@ -367,25 +419,42 @@ class Event:
                                           Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
                 # create a new mining event
-                if(False):
-                    pass  # TODO:need to generate invalid block
-                else:
-                    gen_valid_blk(rec)
+                if(should_blk_invalid(self.blk.blkID)):
+                    if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
+                        return
+
+                # Generate a valid blk now
+                gen_valid_blk(rec)
             else:
                 print(colored(
-                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "red"), file=sys.stderr)
+                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
                 return
 
-        # elif(self.type == Event_type.broadcast_invalid_block):
-        #     #TODO: should rec generate a valid block here?
-        #     for peer in peers[rec]:
-        #         event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
-        #                               Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
+        elif(self.type == Event_type.broadcast_invalid_block):
+
+            # Check if longest chain, otherwise trivially terminated
+            if (self.blk.parent_blkID == nodes[rec].blockchain.mining_block):
+
+                print(colored(
+                    f"{curr_time:.2f} : Node {rec} -> Peers {peers[rec]} , Invalid Blk {self.blk.blkID} generated - {self.blk}", "blue"), file=sys.stderr)
+                print_balance(rec)
+
+                for peer in peers[rec]:
+                    event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
+                                        Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
+
+                # Restart valid block generation
+                gen_valid_blk(rec)
+            else:
+                print(colored(
+                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
+                return
+
         else:  # block received event
             # check if havent received it already, otherwise discard
 
-            # print(
-            # f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
+            print(
+            f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
 
             if(self.blk.blkID in nodes[rec].rec_blk):
                 return
@@ -399,7 +468,8 @@ class Event:
             # check if block is valid, otherise discard
             if(not block_is_valid):
                 print(colored(
-                    f"{curr_time:.2f} : Discarded invalid received blk {self.blk.blkID} at Node {rec} - {self.blk}", "red"), file=sys.stderr)
+                    f"{curr_time:.2f} : Discarded invalid received blk {self.blk.blkID} at Node {rec} - {self.blk}", "blue"), file=sys.stderr)
+                print_balance(rec)
                 return
 
             # add to received block map
@@ -488,6 +558,7 @@ def make_graph():
 
     plot(g, **style)
     plt.show()
+
 
 np.random.seed(seed)
 
