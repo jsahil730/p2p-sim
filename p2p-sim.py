@@ -1,16 +1,19 @@
+from igraph import *
 import sys
 import numpy as np
 from enum import Enum
 from termcolor import colored
 import time
+import matplotlib.pyplot as plt
+from bisect import bisect
 
 # Parameters
-n = 100  # number of nodes in P2P network
+n = 10  # number of nodes in P2P network
 z = 0.7  # probability that a node is fast
 p_edge = 0.3  # probability with which edge is drawn between two nodes
 seed = 102  # seed for random functions
 Ttx = 30  # mean time for transaction generation
-total_sim_time = 1000    # total time the simulation will run
+total_sim_time = 10    # total time the simulation will run
 compile_time = time.time()
 
 
@@ -157,14 +160,8 @@ class Event_Queue:
         self.queue = []
 
     def add_event(self, time, event):
-        index = len(self.queue)
-        for i in range(len(self.queue)):
-            (t, _) = self.queue[i]
-            if(t > time):
-                index = i
-                break
-        new_queue = self.queue[:index] + [(time, event)] + self.queue[index:]
-        self.queue = new_queue
+        index = bisect(self.queue,(time,event))
+        self.queue.insert((time,event))
 
     def execute_event_queue(self):
         global curr_time
@@ -249,12 +246,14 @@ class BlockChain:
         Adds block to blockchain is its parent exists in the chain already
         Otherwise adds to orphans
         If successfully added, checks for orphans to add
-        Assumed here that block is valid
-        Returns if mining_block has changed
+        Checks validity here for blocks in chain
+        Returns a tuple -  (mining_block_has_changed,block_is_valid)
         """
         mining_block_changed = False
         # check if incoming block's parent is in node's blockchain
         if(blk.parent_blkID in self.block_info):
+            if (not self.check_valid_block(blk)):
+                return (False, False)
             self.block_info[blk.blkID] = blk
             self.block_depth[blk.blkID] = 1 + \
                 self.block_depth[blk.parent_blkID]
@@ -276,11 +275,11 @@ class BlockChain:
                 if(orphan.parent_blkID == blk.blkID):
                     self.orphans.remove(orphan)
                     mining_block_changed = mining_block_changed or self.add_block(
-                        orphan)
+                        orphan)[0]
 
         else:
             self.orphans.append(blk)
-        return mining_block_changed
+        return (mining_block_changed, True)
 
     def check_valid_block(self, blk):
         balance = {}
@@ -312,8 +311,8 @@ class Event:
         if(self.type == Event_type.gen_txn):
 
             # for testing txn frowarding
-            print(
-                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}", file=sys.stderr)
+            # print(
+            #     f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}", file=sys.stderr)
 
             # store the sender of the event as -1
             nodes[rec].rec_txn[self.txn.txnID] = -1
@@ -331,8 +330,8 @@ class Event:
         elif(self.type == Event_type.rec_txn):
 
             # for testing txn frowarding
-            print(
-                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}", file=sys.stderr)
+            # print(
+            #     f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}", file=sys.stderr)
 
             if(self.txn.txnID in nodes[rec].rec_txn):
                 return
@@ -360,7 +359,7 @@ class Event:
         elif(self.type == Event_type.gen_blk):
 
             print(
-                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} mined - {self.blk}", file=sys.stderr)
+                f"{curr_time:.2f} : Node {rec} , Blk {self.blk.blkID} mined - {self.blk}", file=sys.stderr)
 
             # check if longest chain block is parent of block in the event
             # otherwise discard event
@@ -389,9 +388,9 @@ class Event:
                 else:
                     gen_valid_blk(rec)
             else:
-                pass
                 print(colored(
                     f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "red"), file=sys.stderr)
+                return
 
         # elif(self.type == Event_type.broadcast_invalid_block):
         #     #TODO: should rec generate a valid block here?
@@ -401,14 +400,20 @@ class Event:
         else:  # block received event
             # check if havent received it already, otherwise discard
 
-            print(
-                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
+            # print(
+            # f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
 
             if(self.blk.blkID in nodes[rec].rec_blk):
                 return
 
+            prev_mining_block = nodes[rec].blockchain.mining_block
+
+            # add block and its children if present in orphan lists
+            # TODO: handle case if blk contains a txn not in the pool of node
+            (mining_block_changed,
+             block_is_valid) = nodes[rec].blockchain.add_block(self.blk)
             # check if block is valid, otherise discard
-            if(not nodes[rec].blockchain.check_valid_block(self.blk)):
+            if(not block_is_valid):
                 print(colored(
                     f"{curr_time:.2f} : Discarded invalid received blk {self.blk.blkID} at Node {rec} - {self.blk}", "red"), file=sys.stderr)
                 return
@@ -425,12 +430,6 @@ class Event:
                     continue
                 event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
                                       Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
-
-            prev_mining_block = nodes[rec].blockchain.mining_block
-
-            # add block and its children if present in orphan lists
-            # TODO: handle case if blk contains a txn not in the pool of node
-            mining_block_changed = nodes[rec].blockchain.add_block(self.blk)
 
             for txn in self.blk.txns:
                 if(txn.sender == MINING_FEE_SENDER):
@@ -459,6 +458,9 @@ class Event:
                         if (txn_it.txnID in nodes[rec].unused):
                             nodes[rec].unused.pop(txn_it.txnID)
                     curr_block = nodes[rec].blockchain.block_info[curr_block].parent_blkID
+
+                # restart mining on the new mining block
+                gen_valid_blk(rec)
             else:
                 return
 
@@ -479,6 +481,31 @@ def finish_simulation():
                 f.write("\n")
 
 
+def make_graph():
+    g = Graph(directed=True)
+    bchain = nodes[0].blockchain
+    for k in bchain.block_info.keys():
+        g.add_vertex(name=f"{k}", label=k if k != -1 else "G")
+
+    for (k, v) in bchain.block_info.items():
+        if (k == -1):
+            continue
+        g.add_edge(f"{k}", f"{v.parent_blkID}")
+
+    fig, ax = plt.subplots()
+
+    root = g.vs.find(name="-1")
+    style = {}
+    style["vertex_size"] = 10
+    style["vertex_label_dist"] = 1.5
+    style["vertex_label_size"] = 10
+    style["layout"] = g.layout_reingold_tilford(root=[root.index])
+    style["target"] = ax
+
+    plot(g, **style)
+    plt.show()
+
+
 if __name__ == '__main__':
     gen_graph()  # graph is sampled
     # print_graph()
@@ -493,3 +520,4 @@ if __name__ == '__main__':
         gen_valid_blk(i)
     event_queue.execute_event_queue()
     finish_simulation()
+    make_graph()
