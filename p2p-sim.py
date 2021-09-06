@@ -31,18 +31,6 @@ MINING_FEE_SENDER = -1
 MAX_TXN_NUM = 1000
 INVALID_BLOCK_FREQ = 50
 
-np.random.seed(seed)
-
-peers = {}  # will store adjacency lists, it is a dictionary of lists
-rho = {}  # stores speed of light propagation delay, accessed as rho[i,j]
-c = {}  # stores link speed, used as c[i,j]
-# stores mean of exponential dist for queuing delay, used as d_mean[i,j]
-d_mean = {}
-nodes = []  # stores nodes of the network
-block_no = 0  # id for blocks
-txn_no = 0  # id for txns
-curr_time = 0  # current time in the simulation
-
 
 def coin_flip(p):
     """Generates 1 with p probabilty"""
@@ -293,10 +281,6 @@ class BlockChain:
             balance[txn.receiver] += txn.amount
         return True
 
-
-event_queue = Event_Queue()
-
-
 class Event:
     def __init__(self, type, sender, rec, txn=None, blk=None):
         self.type = type
@@ -505,19 +489,31 @@ def make_graph():
     plot(g, **style)
     plt.show()
 
+np.random.seed(seed)
 
-if __name__ == '__main__':
-    gen_graph()  # graph is sampled
-    # print_graph()
-    # print('Events:')
-    for i in range(n):  # node objects are assigned to each node id
-        nodes.append(Node())
-    for i in range(int(n*z)):
-        nodes[i].is_fast = True
-    init_global_values()  # parameters for calculating latency are assigned
-    gen_txn()
-    for i in range(n):
-        gen_valid_blk(i)
-    event_queue.execute_event_queue()
-    finish_simulation()
-    make_graph()
+peers = {}  # will store adjacency lists, it is a dictionary of lists
+rho = {}  # stores speed of light propagation delay, accessed as rho[i,j]
+c = {}  # stores link speed, used as c[i,j]
+# stores mean of exponential dist for queuing delay, used as d_mean[i,j]
+d_mean = {}
+nodes = []  # stores nodes of the network
+block_no = 0  # id for blocks
+txn_no = 0  # id for txns
+curr_time = 0  # current time in the simulation
+
+event_queue = Event_Queue()  # Event Queue for storing and executing all events
+
+gen_graph()  # graph is sampled
+# print_graph()
+# print('Events:')
+for i in range(n):  # node objects are assigned to each node id
+    nodes.append(Node())
+for i in range(int(n*z)):
+    nodes[i].is_fast = True
+init_global_values()  # parameters for calculating latency are assigned
+gen_txn()
+for i in range(n):
+    gen_valid_blk(i)
+event_queue.execute_event_queue()
+finish_simulation()
+make_graph()
