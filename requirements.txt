@@ -1,2 +1,4 @@
 numpy
 termcolor
+matplotlib
+python-igraph
