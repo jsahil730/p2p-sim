@@ -601,23 +601,50 @@ def find_ratio():
             num_high += 1
             if(total_gen[i] != 0):
                 high_avg += long_gen[i] / total_gen[i]
-    print('High cpu power fraction of block in longest chain: ', high_avg/num_high)
-    print('Low cpu power fraction of block in longest chain: ', low_avg/num_low)
-    print('High cpu power fraction of total blocks: ', high_rat_avg/sb)
-    print('Low cpu power fraction of total blocks: ', low_rat_avg/sb)
+    print('High cpu power fraction of block in longest chain:', high_avg/num_high)
+    print('Low cpu power fraction of block in longest chain:', low_avg/num_low)
+    print('High cpu power fraction of total blocks:', high_rat_avg/sb)
+    print('Low cpu power fraction of total blocks:', low_rat_avg/sb)
     print('Total blocks:', sb)
-    print('Len longest chain', sum(long_gen))
+    print('Len longest chain:', sum(long_gen))
     
-    # cpu_power = [n.alpha for n in nodes]
-    # pairs =[]
-    # for i in range(n):
-    #     pairs.append((cpu_power[i], ratio[i]))
-    # pairs.sort(key = lambda x: x[0])
-    # # print(pairs)
-    # plt.plot([cp for cp, rat in pairs], [rat for cp, rat in pairs] )
-    # plt.xlabel('Average mining time')
-    # plt.ylabel('Number of blocks in Longest chain/total blocks generated')
-    # plt.show()
+    all_blocks = {}
+    leaf_blocks = {}
+    for k,v in nodes[0].blockchain.block_info.items():
+        all_blocks[v.blkID] = 0
+        leaf_blocks[v.blkID] = 1
+        
+
+    all_blocks[-1] = 1
+    leaf_blocks[-1] = 1
+    mb = nodes[0].blockchain.mining_block
+    while(mb != -1):
+        all_blocks[mb]=1
+        mb = nodes[0].blockchain.block_info[mb].parent_blkID
+
+    num_forks = 0
+    for k,v in nodes[0].blockchain.block_info.items():
+        leaf_blocks[v.parent_blkID] = 0
+        if(all_blocks[v.parent_blkID] == 1 and all_blocks[v.blkID]==0):
+            num_forks+=1
+    
+    num_branches = 0
+    branch_length = 0
+    for k,v in nodes[0].blockchain.block_info.items():
+        if(leaf_blocks[v.blkID]==1 and all_blocks[v.blkID]==0):
+            x = v.blkID
+            num_branches+=1
+            while(not(all_blocks[x])):
+                branch_length+=1
+                x = nodes[0].blockchain.block_info[x].parent_blkID
+    
+    print('Total Number of Forks:', num_forks)
+    print('Average Length of Branches:', branch_length/num_branches)
+
+
+
+
+
     
     
 
