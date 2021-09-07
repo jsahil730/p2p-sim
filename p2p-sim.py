@@ -2,6 +2,7 @@ from igraph import *
 import sys, os
 import numpy as np
 from enum import Enum
+from numpy.core.fromnumeric import sort
 from termcolor import colored
 import time
 import matplotlib.pyplot as plt
@@ -241,8 +242,12 @@ class Block:
 
 class Node:
     def __init__(self):
-        self.alpha = lower_tk + np.random.random()*(upper_tk-lower_tk)  # Average Mining time
-        # Selected uniformly from [120,300]
+        flip = coin_flip(0.5)
+        if(flip):
+            self.alpha = lower_tk
+        else:
+            self.alpha = upper_tk
+        # self.alpha = lower_tk + np.random.random()*(upper_tk-lower_tk)  # Average Mining time
         self.is_fast = False       # Slow or Fast
         self.blockchain = BlockChain()    # Blockchain -- tree of blocks
         self.unused = {}                  # List of Unused transactions
@@ -413,8 +418,8 @@ class Event:
                 # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
-                print(colored(
-                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
+                # print(colored(
+                #     f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
                 return
 
         elif(self.type == Event_type.broadcast_invalid_block):
@@ -445,8 +450,8 @@ class Event:
         else:  # block received event
             # check if havent received it already, otherwise discard
 
-            print(
-            f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
+            # print(
+            # f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
 
             if(self.blk.blkID in nodes[rec].rec_blk):
                 return
@@ -565,12 +570,63 @@ def make_graph():
     plot(g, img_file, **style)
     # plt.show()
 
+def find_ratio():
+    
+    ratio = [0 for _ in range(n)]
+    total_gen = [0 for _ in range(n)]
+    long_gen = [0 for _ in range(n)]
+    for k,v in nodes[0].blockchain.block_info.items():
+        if(v.blkID == -1):
+            continue
+        total_gen[v.txns[0].receiver]+= 1
+    mb = nodes[0].blockchain.mining_block
+    sb = sum(total_gen)
+    while(mb != -1):
+        long_gen[nodes[0].blockchain.block_info[mb].txns[0].receiver]+= 1
+        mb = nodes[0].blockchain.block_info[mb].parent_blkID
+    num_low = 0
+    num_high = 0
+    low_rat_avg = 0
+    high_rat_avg = 0
+    low_avg = 0
+    high_avg = 0
+    for i in range(n):
+        if(nodes[i].alpha == upper_tk):
+            low_rat_avg+= total_gen[i]
+            num_low += 1
+            if(total_gen[i] != 0):
+                low_avg += long_gen[i] / total_gen[i]
+        else:
+            high_rat_avg += total_gen[i]
+            num_high += 1
+            if(total_gen[i] != 0):
+                high_avg += long_gen[i] / total_gen[i]
+    print('High cpu power fraction of block in longest chain: ', high_avg/num_high)
+    print('Low cpu power fraction of block in longest chain: ', low_avg/num_low)
+    print('High cpu power fraction of total blocks: ', high_rat_avg/sb)
+    print('Low cpu power fraction of total blocks: ', low_rat_avg/sb)
+    print('Total blocks:', sb)
+    print('Len longest chain', sum(long_gen))
+    
+    # cpu_power = [n.alpha for n in nodes]
+    # pairs =[]
+    # for i in range(n):
+    #     pairs.append((cpu_power[i], ratio[i]))
+    # pairs.sort(key = lambda x: x[0])
+    # # print(pairs)
+    # plt.plot([cp for cp, rat in pairs], [rat for cp, rat in pairs] )
+    # plt.xlabel('Average mining time')
+    # plt.ylabel('Number of blocks in Longest chain/total blocks generated')
+    # plt.show()
+    
+    
+
 parser = ArgumentParser()
 parser.add_argument("--nodes",help="nodes in P2P network",default=10,type=int)
 parser.add_argument("--z",help="probability of each node being fast",default=0.7,type=float)
 parser.add_argument("--edge",help="probability of each edge being present or absent",default=0.3,type=float)
 parser.add_argument("--invalid",help="probability of each block being invalid",default=0.1,type=float)
-parser.add_argument("--Ttx",help="mean time for txn gen",default=10,type=float)
+parser.add_argument("--Ttx",help="mean time for txn gen",default=5,type=float)
 parser.add_argument("--sim_time",help="maximum simulation time",default=1000,type=float)
 parser.add_argument("--seed",help="seed for random functions",default=0,type=int)
 parser.add_argument("--ltk",help="lower bound on Tk",default=120,type=float)
@@ -626,3 +682,4 @@ for i in range(n):
 event_queue.execute_event_queue()
 finish_simulation()
 make_graph()
+find_ratio()
