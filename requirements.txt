@@ -2,3 +2,4 @@ numpy
 termcolor
 matplotlib
 python-igraph
+pycairo
