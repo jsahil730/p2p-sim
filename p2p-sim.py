@@ -16,8 +16,8 @@ seed = 102  # seed for random functions
 Ttx = 30  # mean time for transaction generation
 total_sim_time = 10   # total time the simulation will run
 compile_time = time.time()
-lower_tk = 1
-upper_tk = 2
+lower_tk = 1 # lower bound on avg mining time
+upper_tk = 2 # upper bound on avg mining time
 
 
 class Event_type(Enum):
