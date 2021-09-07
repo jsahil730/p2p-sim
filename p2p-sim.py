@@ -177,9 +177,9 @@ def print_balance(nodeID):
     for i in range(n):
         balance[i] = nodes[nodeID].blockchain.node_coins[chain,i]
 
-    print("Balance -> ")
+    print("Balance -> ",file=sys.stderr)
     for i in range(n):
-        print(f"\tNode {i} : {balance[i]} coins")
+        print(f"\tNode {i} : {balance[i]} coins",file=sys.stderr)
 
 
 # Structs
@@ -590,7 +590,24 @@ def find_ratio():
     high_rat_avg = 0
     low_avg = 0
     high_avg = 0
+    num_slow = 0
+    num_fast = 0
+    slow_rat_avg = 0
+    fast_rat_avg = 0
+    slow_avg = 0
+    fast_avg = 0
     for i in range(n):
+        if(nodes[i].is_fast):
+            fast_rat_avg+=total_gen[i]
+            num_fast += 1
+            if(total_gen[i]!=0):
+                fast_avg += long_gen[i] / total_gen[i]
+        else:
+            slow_rat_avg += total_gen[i]
+            num_slow += 1
+            if(total_gen[i] != 0):
+                slow_avg += long_gen[i] / total_gen[i]
+
         if(nodes[i].alpha == upper_tk):
             low_rat_avg+= total_gen[i]
             num_low += 1
@@ -605,6 +622,10 @@ def find_ratio():
     print('Low cpu power fraction of block in longest chain:', low_avg/num_low)
     print('High cpu power fraction of total blocks:', high_rat_avg/sb)
     print('Low cpu power fraction of total blocks:', low_rat_avg/sb)
+    print('Fast node fraction of block in longest chain:', fast_avg/num_fast)
+    print('Slow node fraction of block in longest chain:', slow_avg/num_slow)
+    print('Fast node fraction of total blocks:', fast_rat_avg/sb)
+    print('Slow node fraction of total blocks:', slow_rat_avg/sb)
     print('Total blocks:', sb)
     print('Len longest chain:', sum(long_gen))
     
@@ -640,12 +661,11 @@ def find_ratio():
     
     print('Total Number of Forks:', num_forks)
     print('Average Length of Branches:', branch_length/num_branches)
+    print('High CPU nodes:', num_high)
+    print('Low CPU nodes:', num_low)
+    print('Fast nodes:', num_fast)
+    print('Slow nodes:', num_slow)
 
-
-
-
-
-    
     
 
 parser = ArgumentParser()
