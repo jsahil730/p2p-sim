@@ -243,11 +243,11 @@ class Block:
 class Node:
     def __init__(self):
         flip = coin_flip(0.5)
+        # alpha is average mining time
         if(flip):
             self.alpha = lower_tk
         else:
             self.alpha = upper_tk
-        # self.alpha = lower_tk + np.random.random()*(upper_tk-lower_tk)  # Average Mining time
         self.is_fast = False       # Slow or Fast
         self.blockchain = BlockChain()    # Blockchain -- tree of blocks
         self.unused = {}                  # List of Unused transactions
@@ -273,7 +273,6 @@ class BlockChain:
         #  which mining will take place ##
         # blocks whose parents are not in the blockchain
         self.orphans = []
-        # self.longest_chain = [-1]                   # List of blockIDs in the longest chain
 
     def add_block(self, blk):
         """
@@ -299,9 +298,6 @@ class BlockChain:
                     self.node_coins[blk.blkID, txn.sender] -= txn.amount
                 self.node_coins[blk.blkID, txn.receiver] += txn.amount
             if(self.block_depth[blk.blkID] > self.block_depth[self.mining_block]):
-                # if(blk.parent_blkID == self.mining_block):
-                #     self.longest_chain.append(blk.blkID)
-
                 self.mining_block = blk.blkID
                 mining_block_changed = True
             orphans_copy = self.orphans.copy()
@@ -342,8 +338,8 @@ class Event:
         if(self.type == Event_type.gen_txn):
 
             # for testing txn frowarding
-            # print(
-            #     f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}", file=sys.stderr)
+            print(
+                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}", file=sys.stderr)
 
             # store the sender of the event as -1
             nodes[rec].rec_txn[self.txn.txnID] = -1
@@ -361,8 +357,8 @@ class Event:
         elif(self.type == Event_type.rec_txn):
 
             # for testing txn frowarding
-            # print(
-            #     f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}", file=sys.stderr)
+            print(
+                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}", file=sys.stderr)
 
             if(self.txn.txnID in nodes[rec].rec_txn):
                 return
@@ -418,8 +414,8 @@ class Event:
                 # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
-                # print(colored(
-                #     f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
+                print(colored(
+                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
                 return
 
         elif(self.type == Event_type.broadcast_invalid_block):
@@ -450,8 +446,8 @@ class Event:
         else:  # block received event
             # check if havent received it already, otherwise discard
 
-            # print(
-            # f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
+            print(
+            f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
 
             if(self.blk.blkID in nodes[rec].rec_blk):
                 return
@@ -481,15 +477,8 @@ class Event:
                 event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
                                       Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
-            # for txn in self.blk.txns:
-            #     if(txn.sender == MINING_FEE_SENDER):
-            #         continue
-            #     if(txn.txnID not in nodes[rec].rec_txn):
-            #         print('Block containts unreceived txn')
-
             if(mining_block_changed):
                 new_mining_block = nodes[rec].blockchain.mining_block
-                # chain_changed = True # why this
                 iter = new_mining_block
                 while((iter != prev_mining_block) and (iter != -1)):
                     iter = nodes[rec].blockchain.block_info[iter].parent_blkID
@@ -523,6 +512,10 @@ class Event:
 
 
 def finish_simulation():
+    """
+    It deletes any existing log files, and creates new log files containing blockchain 
+    dumps for each node
+    """
     logs = os.listdir()
     for i in logs:
         if (i.endswith(".log")):
@@ -545,6 +538,9 @@ def finish_simulation():
 
 
 def make_graph():
+    """
+    It is the visualisation tool for the blockchains formed at the end of simulation
+    """
     g = Graph()
     bchain = nodes[0].blockchain
     for k in bchain.block_info.keys():
@@ -564,14 +560,16 @@ def make_graph():
     style["vertex_label_size"] = 10
     style["layout"] = g.layout_reingold_tilford(root=[root.index])
     style["bbox"] = (800,800)
-    # style["target"] = ax
-
     plot(g,**style)
     plot(g, img_file, **style)
-    # plt.show()
+    style["target"] = ax
+    plot(g, **style)
+    plt.show()
 
 def find_ratio():
-    
+    """
+    It outputs the various ratios as the result of simulation
+    """
     ratio = [0 for _ in range(n)]
     total_gen = [0 for _ in range(n)]
     long_gen = [0 for _ in range(n)]
@@ -716,8 +714,6 @@ curr_time = 0  # current time in the simulation
 event_queue = Event_Queue()  # Event Queue for storing and executing all events
 
 gen_graph()  # graph is sampled
-# print_graph()
-# print('Events:')
 for i in range(n):  # node objects are assigned to each node id
     nodes.append(Node())
 for i in range(int(n*z)):
@@ -729,4 +725,4 @@ for i in range(n):
 event_queue.execute_event_queue()
 finish_simulation()
 make_graph()
-find_ratio()
+# find_ratio()
