@@ -1,5 +1,5 @@
 from igraph import *
-import sys
+import sys, os
 import numpy as np
 from enum import Enum
 from termcolor import colored
@@ -232,11 +232,11 @@ class Block:
 
         return f"BlkID: {self.blkID}; Parent : {self.parent_blkID}; Txns : {self.txns}"
 
-    def log_data(self, toa=None):
+    def log_data(self, depth, toa=None):
         if (self.blkID == -1):
-            return f"<genesis block hash>,N/A,N/A"
+            return f"<genesis block>,{depth},N/A,N/A"
         else:
-            return f"{self.blkID},{'' if toa is None else time.asctime(time.gmtime(toa))},{self.parent_blkID if self.parent_blkID != -1 else '<genesis block hash>'}"
+            return f"{self.blkID},{depth},{'' if toa is None else time.asctime(time.gmtime(toa))},{self.parent_blkID if self.parent_blkID != -1 else '<genesis block>'}"
 
 
 class Node:
@@ -518,16 +518,22 @@ class Event:
 
 
 def finish_simulation():
+    logs = os.listdir()
+    for i in logs:
+        if (i.endswith(".log")):
+            os.remove(i)
+    
     for i in range(len(nodes)):
         l_log = []
         with open(f"{i}.log", 'w') as f:
-            for id, blk in nodes[i].blockchain.block_info.items():
-                if (id == -1):
-                    continue  # genesis block
+            binfo = nodes[i].blockchain.block_info
+            bdepth = nodes[i].blockchain.block_depth
+            for id, blk in binfo.items():
                 tm = None
+                d = bdepth[id]
                 if (blk.blkID in nodes[i].toa):
                     tm = compile_time + nodes[i].toa[blk.blkID]
-                l_log.append((tm, blk.log_data(tm)))
+                l_log.append((d, blk.log_data(d,tm)))
             for i in sorted(l_log):
                 f.write(i[1])
                 f.write("\n")
