@@ -14,8 +14,10 @@ p_edge = 0.3  # probability with which edge is drawn between two nodes
 p_invalid = 0.5  # probability of each block being invalid
 seed = 102  # seed for random functions
 Ttx = 30  # mean time for transaction generation
-total_sim_time = 1000    # total time the simulation will run
+total_sim_time = 10   # total time the simulation will run
 compile_time = time.time()
+lower_tk = 1
+upper_tk = 2
 
 
 class Event_type(Enum):
@@ -251,7 +253,7 @@ class Block:
 
 class Node:
     def __init__(self):
-        self.alpha = 120 + np.random.random()*(180)  # Average Mining time
+        self.alpha = lower_tk + np.random.random()*(upper_tk)  # Average Mining time
         # Selected uniformly from [120,300]
         self.is_fast = False       # Slow or Fast
         self.blockchain = BlockChain()    # Blockchain -- tree of blocks
@@ -378,9 +380,6 @@ class Event:
             # if rec has already got this txn through a block, then it just stores it in its pool
             # without forwarding
             # add to unused list
-            # TODO: What exactly to do if we receive a block with new txn
-            # if((self.txn.txnID not in nodes[rec].unused) and (self.txn.txnID not in nodes[rec].used)):
-            #     nodes[rec].unused[self.txn.txnID] = self.txn
 
             nodes[rec].unused[self.txn.txnID] = self.txn
 
@@ -443,7 +442,12 @@ class Event:
                     event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
                                         Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
-                # Restart valid block generation
+                # create a new mining event
+                if(should_blk_invalid(self.blk.blkID)):
+                    if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
+                        return
+
+                # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
                 print(colored(
@@ -462,7 +466,6 @@ class Event:
             prev_mining_block = nodes[rec].blockchain.mining_block
 
             # add block and its children if present in orphan lists
-            # TODO: handle case if blk contains a txn not in the pool of node
             (mining_block_changed,
              block_is_valid) = nodes[rec].blockchain.add_block(self.blk)
             # check if block is valid, otherise discard
@@ -485,11 +488,11 @@ class Event:
                 event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
                                       Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
-            for txn in self.blk.txns:
-                if(txn.sender == MINING_FEE_SENDER):
-                    continue
-                if(txn.txnID not in nodes[rec].rec_txn):
-                    print('Block containts unreceived txn')
+            # for txn in self.blk.txns:
+            #     if(txn.sender == MINING_FEE_SENDER):
+            #         continue
+            #     if(txn.txnID not in nodes[rec].rec_txn):
+            #         print('Block containts unreceived txn')
 
             if(mining_block_changed):
                 new_mining_block = nodes[rec].blockchain.mining_block
@@ -514,6 +517,11 @@ class Event:
                     curr_block = nodes[rec].blockchain.block_info[curr_block].parent_blkID
 
                 # restart mining on the new mining block
+                if(should_blk_invalid(self.blk.blkID)):
+                    if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
+                        return
+
+                # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
                 return
@@ -536,7 +544,7 @@ def finish_simulation():
 
 
 def make_graph():
-    g = Graph(directed=True)
+    g = Graph()
     bchain = nodes[0].blockchain
     for k in bchain.block_info.keys():
         g.add_vertex(name=f"{k}", label=k if k != -1 else "G")
@@ -546,7 +554,7 @@ def make_graph():
             continue
         g.add_edge(f"{k}", f"{v.parent_blkID}")
 
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
 
     root = g.vs.find(name="-1")
     style = {}
@@ -554,10 +562,11 @@ def make_graph():
     style["vertex_label_dist"] = 1.5
     style["vertex_label_size"] = 10
     style["layout"] = g.layout_reingold_tilford(root=[root.index])
-    style["target"] = ax
+    style["bbox"] = (1000,1000)
+    # style["target"] = ax
 
     plot(g, **style)
-    plt.show()
+    # plt.show()
 
 
 np.random.seed(seed)
