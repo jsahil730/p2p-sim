@@ -6,19 +6,7 @@ from termcolor import colored
 import time
 import matplotlib.pyplot as plt
 from bisect import bisect
-
-# Parameters
-n = 10  # number of nodes in P2P network
-z = 0.7  # probability that a node is fast
-p_edge = 0.3  # probability with which edge is drawn between two nodes
-p_invalid = 0.5  # probability of each block being invalid
-seed = 102  # seed for random functions
-Ttx = 30  # mean time for transaction generation
-total_sim_time = 10   # total time the simulation will run
-compile_time = time.time()
-lower_tk = 1 # lower bound on avg mining time
-upper_tk = 2 # upper bound on avg mining time
-
+from argparse import *
 
 class Event_type(Enum):
     gen_txn = 0
@@ -44,12 +32,12 @@ def coin_flip(p):
         return 0
 
 
-def connect_dfs(i, visited):
+def dfs(i, visited):
     """Performs dfs on node i"""
     visited[i] = True
     for j in peers[i]:
         if(not visited[j]):
-            connect_dfs(j, visited)
+            dfs(j, visited)
 
 
 def gen_graph():
@@ -59,6 +47,7 @@ def gen_graph():
     i) Connect each pair with p_edge probabilty
     ii) Connect the graph by running a dfs and making edge between dfs roots
     """
+    global peers
     for i in range(n):
         peers[i] = []
     for i in range(n):
@@ -73,11 +62,10 @@ def gen_graph():
     for i in range(n):
         if(not visited[i]):
             roots.append(i)
-            connect_dfs(i, visited)
-    for i in range(len(roots)-1):
-        peers[roots[i]].append(roots[i+1])
-        peers[roots[i+1]].append(roots[i])
-
+            dfs(i, visited)
+    if (len(roots) > 1):
+        peers = {}
+        gen_graph()
 
 def print_graph():
     """Prints adjacency list"""
@@ -144,7 +132,7 @@ def gen_valid_blk(nodeID):
         Event_type.gen_blk, -1, nodeID, txn=None, blk=new_blk))
 
 
-def should_blk_invalid(blkID):
+def should_blk_invalid():
     return bool(np.random.binomial(1, p_invalid))
 
 def gen_invalid_blk(nodeID):
@@ -253,7 +241,7 @@ class Block:
 
 class Node:
     def __init__(self):
-        self.alpha = lower_tk + np.random.random()*(upper_tk)  # Average Mining time
+        self.alpha = lower_tk + np.random.random()*(upper_tk-lower_tk)  # Average Mining time
         # Selected uniformly from [120,300]
         self.is_fast = False       # Slow or Fast
         self.blockchain = BlockChain()    # Blockchain -- tree of blocks
@@ -418,7 +406,7 @@ class Event:
                                           Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
                 # create a new mining event
-                if(should_blk_invalid(self.blk.blkID)):
+                if(should_blk_invalid()):
                     if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
                         return
 
@@ -443,7 +431,7 @@ class Event:
                                         Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
                 # create a new mining event
-                if(should_blk_invalid(self.blk.blkID)):
+                if(should_blk_invalid()):
                     if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
                         return
 
@@ -511,13 +499,15 @@ class Event:
                 curr_block = new_mining_block
                 while (curr_block != iter):
                     for txn_it in nodes[rec].blockchain.block_info[curr_block].txns:
+                        if (txn_it.sender == MINING_FEE_SENDER):
+                            continue
                         nodes[rec].used[txn_it.txnID] = txn_it
                         if (txn_it.txnID in nodes[rec].unused):
                             nodes[rec].unused.pop(txn_it.txnID)
                     curr_block = nodes[rec].blockchain.block_info[curr_block].parent_blkID
 
                 # restart mining on the new mining block
-                if(should_blk_invalid(self.blk.blkID)):
+                if(should_blk_invalid()):
                     if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
                         return
 
@@ -562,12 +552,45 @@ def make_graph():
     style["vertex_label_dist"] = 1.5
     style["vertex_label_size"] = 10
     style["layout"] = g.layout_reingold_tilford(root=[root.index])
-    style["bbox"] = (1000,1000)
+    style["bbox"] = (800,800)
     # style["target"] = ax
 
-    plot(g, **style)
+    plot(g,**style)
+    plot(g, img_file, **style)
     # plt.show()
 
+parser = ArgumentParser()
+parser.add_argument("--nodes",help="nodes in P2P network",default=10,type=int)
+parser.add_argument("--z",help="probability of each node being fast",default=0.7,type=float)
+parser.add_argument("--edge",help="probability of each edge being present or absent",default=0.3,type=float)
+parser.add_argument("--invalid",help="probability of each block being invalid",default=0.1,type=float)
+parser.add_argument("--Ttx",help="mean time for txn gen",default=10,type=float)
+parser.add_argument("--sim_time",help="maximum simulation time",default=1000,type=float)
+parser.add_argument("--seed",help="seed for random functions",default=0,type=int)
+parser.add_argument("--ltk",help="lower bound on Tk",default=120,type=float)
+parser.add_argument("--utk",help="upper bound on Tk",default=300,type=float)
+parser.add_argument("--img",help="output image name, png images are generated",default="img",type=str)
+
+args = parser.parse_args()
+print(f"Arguments received : {args}")
+
+# Parameters
+n = args.nodes  # number of nodes in P2P network
+z = args.z # probability that a node is fast
+p_edge = args.edge  # probability with which edge is drawn between two nodes
+p_invalid = args.invalid  # probability of each block being invalid
+seed = args.seed  # seed for random functions
+Ttx = args.Ttx  # mean time for transaction generation
+total_sim_time = args.sim_time   # total time the simulation will run
+compile_time = time.time()
+lower_tk = args.ltk  # lower bound on avg mining time
+upper_tk = args.utk  # upper bound on avg mining time
+img_file = f"{args.img}.png"
+
+assert upper_tk >= lower_tk, "utk < ltk"
+assert 0 <= p_edge <= 1
+assert 0 <= p_invalid <= 1
+assert 0 <= z <= 1
 
 np.random.seed(seed)
 
