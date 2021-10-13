@@ -71,7 +71,7 @@ def gen_graph(n):
             dfs(i, visited)
     if (len(roots) > 1):
         peers = {}
-        gen_graph()
+        gen_graph(n)
 
 def print_graph():
     """Prints adjacency list"""
@@ -346,8 +346,8 @@ class Event:
         if(self.type == Event_type.gen_txn):
 
             # for testing txn frowarding
-            print(
-                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}", file=sys.stderr)
+            # print(
+            #     f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} generated - {self.txn}", file=sys.stderr)
 
             # store the sender of the event as -1
             nodes[rec].rec_txn[self.txn.txnID] = -1
@@ -365,8 +365,8 @@ class Event:
         elif(self.type == Event_type.rec_txn):
 
             # for testing txn frowarding
-            print(
-                f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}", file=sys.stderr)
+            # print(
+            #     f"{curr_time:.2f} : Node {sen} -> Node {rec} , Txn {self.txn.txnID} received - {self.txn}", file=sys.stderr)
 
             if(self.txn.txnID in nodes[rec].rec_txn):
                 return
@@ -390,8 +390,8 @@ class Event:
                         curr_time + get_latency(rec, peer, 8), Event(Event_type.rec_txn, rec, peer, self.txn))
         elif(self.type == Event_type.gen_blk):
 
-            print(
-                f"{curr_time:.2f} : Node {rec} , Blk {self.blk.blkID} mined - {self.blk}", file=sys.stderr)
+            # print(
+            #     f"{curr_time:.2f} : Node {rec} , Blk {self.blk.blkID} mined - {self.blk}", file=sys.stderr)
 
             # check if longest chain block is parent of block in the event
             # otherwise discard event
@@ -415,8 +415,9 @@ class Event:
                         event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
                                             Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
                 else:
-                    # if adversary, add to private chain
-                    nodes[rec].private.append(self.blk.blkID)
+                    # if adversary, add to blockchain.private chain
+                    nodes[rec].blockchain.private.append(self.blk.blkID)
+                    print(f"{curr_time:.2f} : Adversary {rec} mined - {self.blk.blkID}", file=sys.stderr)
 
                 # create a new mining event
                 # TODO : will see if required later
@@ -427,8 +428,8 @@ class Event:
                 # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
-                print(colored(
-                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
+                # print(colored(
+                #     f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
                 return
 
         elif(self.type == Event_type.broadcast_invalid_block):
@@ -436,9 +437,9 @@ class Event:
             # Check if longest chain, otherwise trivially terminated
             if (self.blk.parent_blkID == nodes[rec].blockchain.mining_block):
 
-                print(colored(
-                    f"{curr_time:.2f} : Node {rec} -> Peers {peers[rec]} , Invalid Blk {self.blk.blkID} generated - {self.blk}", "blue"), file=sys.stderr)
-                print_balance(rec)
+                # print(colored(
+                #     f"{curr_time:.2f} : Node {rec} -> Peers {peers[rec]} , Invalid Blk {self.blk.blkID} generated - {self.blk}", "blue"), file=sys.stderr)
+                # print_balance(rec)
 
                 for peer in peers[rec]:
                     event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
@@ -452,15 +453,15 @@ class Event:
                 # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
-                print(colored(
-                    f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
+                # print(colored(
+                    # f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
                 return
 
         else:  # block received event
             # check if havent received it already, otherwise discard
 
-            print(
-            f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
+            # print(
+            # f"{curr_time:.2f} : Node {sen} -> Node {rec} , Blk {self.blk.blkID} received - {self.blk}", file=sys.stderr)
 
             if(self.blk.blkID in nodes[rec].rec_blk):
                 return
@@ -472,9 +473,9 @@ class Event:
              block_is_valid) = nodes[rec].blockchain.add_block(self.blk)
             # check if block is valid, otherise discard
             if(not block_is_valid):
-                print(colored(
-                    f"{curr_time:.2f} : Discarded invalid received blk {self.blk.blkID} at Node {rec} - {self.blk}", "blue"), file=sys.stderr)
-                print_balance(rec)
+                # print(colored(
+                #     f"{curr_time:.2f} : Discarded invalid received blk {self.blk.blkID} at Node {rec} - {self.blk}", "blue"), file=sys.stderr)
+                # print_balance(rec)
                 return
 
             # add to received block map
@@ -492,33 +493,31 @@ class Event:
                                         Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
             else:
                 # Adversary has private blocks
-                lead = len(nodes[rec].private)
-
+                lead = len(nodes[rec].blockchain.private)
                 if (lead > 0):
                     # If honest miners have matched adversary's first block
-                    if (nodes[rec].blockchain.block_depth[self.blk.blkID] == nodes[rec].blockchain.block_depth[nodes[rec].private[0]]):
-
-                        blk = nodes[rec].blockchain.block_info[nodes[rec].private.pop(0)]
+                    if (nodes[rec].blockchain.block_depth[self.blk.blkID] == nodes[rec].blockchain.block_depth[nodes[rec].blockchain.private[0]]):
+                        print(lead)
+                        blk = nodes[rec].blockchain.block_info[nodes[rec].blockchain.private.pop(0)]
+                        print(f"{curr_time:.2f} : Adversary {rec} reveals a block - {blk.blkID}", file=sys.stderr)
                         # publish first block
                         for peer in peers[rec]:
                             if(peer == sen):
                                 continue
                             event_queue.add_event(curr_time + get_latency(rec, peer, blk.size),
                                                 Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))
-
+                        if(nodes[rec].type == Mode.selfish):
+                            print('Hi')
                         if (lead == 2 and nodes[rec].type == Mode.selfish):
-                            blk = nodes[rec].blockchain.block_info[nodes[rec].private.pop(0)]
+                            blk = nodes[rec].blockchain.block_info[nodes[rec].blockchain.private.pop(0)]
+                            print(f"{curr_time:.2f} : Adversary {rec} reveals a second block - {blk.blkID}", file=sys.stderr)
                             # publish second block also when lead is 2
                             for peer in peers[rec]:
                                 if(peer == sen):
                                     continue
                                 event_queue.add_event(curr_time + get_latency(rec, peer, blk.size),
-                                                    Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))
-
+                                                    Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))                     
                         
-
-                        
-
             if(mining_block_changed):
                 new_mining_block = nodes[rec].blockchain.mining_block
                 iter = new_mining_block
@@ -659,16 +658,16 @@ def find_ratio():
             num_high += 1
             if(total_gen[i] != 0):
                 high_avg += long_gen[i] / total_gen[i]
-    print('High cpu power fraction of block in longest chain:', high_avg/num_high)
-    print('Low cpu power fraction of block in longest chain:', low_avg/num_low)
-    print('High cpu power fraction of total blocks:', high_rat_avg/sb)
-    print('Low cpu power fraction of total blocks:', low_rat_avg/sb)
-    print('Fast node fraction of block in longest chain:', fast_avg/num_fast)
-    print('Slow node fraction of block in longest chain:', slow_avg/num_slow)
-    print('Fast node fraction of total blocks:', fast_rat_avg/sb)
-    print('Slow node fraction of total blocks:', slow_rat_avg/sb)
-    print('Total blocks:', sb)
-    print('Len longest chain:', sum(long_gen))
+    # print('High cpu power fraction of block in longest chain:', high_avg/num_high)
+    # print('Low cpu power fraction of block in longest chain:', low_avg/num_low)
+    # print('High cpu power fraction of total blocks:', high_rat_avg/sb)
+    # print('Low cpu power fraction of total blocks:', low_rat_avg/sb)
+    # print('Fast node fraction of block in longest chain:', fast_avg/num_fast)
+    # print('Slow node fraction of block in longest chain:', slow_avg/num_slow)
+    # print('Fast node fraction of total blocks:', fast_rat_avg/sb)
+    # print('Slow node fraction of total blocks:', slow_rat_avg/sb)
+    # print('Total blocks:', sb)
+    # print('Len longest chain:', sum(long_gen))
     
     all_blocks = {}
     leaf_blocks = {}
@@ -700,12 +699,12 @@ def find_ratio():
                 branch_length+=1
                 x = nodes[0].blockchain.block_info[x].parent_blkID
     
-    print('Total Number of Forks:', num_forks)
-    print('Average Length of Branches:', branch_length/num_branches)
-    print('High CPU nodes:', num_high)
-    print('Low CPU nodes:', num_low)
-    print('Fast nodes:', num_fast)
-    print('Slow nodes:', num_slow)
+    # print('Total Number of Forks:', num_forks)
+    # print('Average Length of Branches:', branch_length/num_branches)
+    # print('High CPU nodes:', num_high)
+    # print('Low CPU nodes:', num_low)
+    # print('Fast nodes:', num_fast)
+    # print('Slow nodes:', num_slow)
 
     
 
@@ -720,7 +719,7 @@ parser.add_argument("--seed",help="seed for random functions",default=0,type=int
 parser.add_argument("--ltk",help="lower bound on Tk",default=120,type=float)
 parser.add_argument("--utk",help="upper bound on Tk",default=300,type=float)
 parser.add_argument("--img",help="output image name, png images are generated",default="img",type=str)
-parser.add_argument("--mode",help="Mode for selfish or stubborn mining",default=Mode.normal,type=int,choices=[Mode.normal,Mode.selfish,Mode.stubborn])
+parser.add_argument("--mode",help="Mode for selfish or stubborn mining",default=0,type=int,choices=[0,1,2])
 parser.add_argument("--conns",help="Percentage connections for selfish/stubborn mining",default=25.0,type=float)
 
 args = parser.parse_args()
@@ -772,9 +771,9 @@ else:
     # create fast adversary
     nodes[-1].type = mode
     nodes[-1].is_fast = True
-
+    nodes[-1].alpha = lower_tk / 2
     arr = np.random.choice(n-1,int(zeta*(n-1)))
-
+    peers[n-1] = []
     # connect to zeta*(n-1) honest miners
     for i in arr:
         peers[i].append(n-1)
@@ -787,5 +786,5 @@ for i in range(n):
     gen_valid_blk(i)
 event_queue.execute_event_queue()
 finish_simulation()
-make_graph()
+# make_graph()
 # find_ratio()
