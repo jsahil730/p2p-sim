@@ -29,6 +29,70 @@ MAX_TXN_NUM = 1000
 INVALID_BLOCK_FREQ = 50
 
 
+parser = ArgumentParser()
+parser.add_argument("--nodes", help="nodes in P2P network",
+                    default=10, type=int)
+parser.add_argument(
+    "--z", help="probability of each node being fast", default=0.5, type=float)
+parser.add_argument(
+    "--edge", help="probability of each edge being present or absent", default=0.3, type=float)
+parser.add_argument(
+    "--invalid", help="probability of each block being invalid", default=0.1, type=float)
+parser.add_argument("--Ttx", help="mean time for txn gen",
+                    default=5, type=float)
+parser.add_argument(
+    "--sim_time", help="maximum simulation time", default=1000, type=float)
+parser.add_argument(
+    "--seed", help="seed for random functions", default=0, type=int)
+parser.add_argument("--ltk", help="lower bound on Tk", default=120, type=float)
+parser.add_argument("--utk", help="upper bound on Tk", default=300, type=float)
+parser.add_argument(
+    "--img", help="output image name, png images are generated", default="img", type=str)
+parser.add_argument("--mode", help="Mode for selfish or stubborn mining",
+                    default=0, type=int, choices=[0, 1, 2])
+parser.add_argument(
+    "--conns", help="Percentage connections for selfish/stubborn mining", default=25.0, type=float)
+
+parser.add_argument("--m_pow", help= "Mining power of adversary is m_pow times that of honest miner", default = 5, type = float)
+
+args = parser.parse_args()
+print(f"Arguments received : {args}")
+
+# Parameters
+n = args.nodes  # number of nodes in P2P network
+z = args.z  # probability that a node is fast
+p_edge = args.edge  # probability with which edge is drawn between two nodes
+p_invalid = args.invalid  # probability of each block being invalid
+seed = args.seed  # seed for random functions
+Ttx = args.Ttx  # mean time for transaction generation
+total_sim_time = args.sim_time   # total time the simulation will run
+compile_time = time.time()
+lower_tk = args.ltk  # lower bound on avg mining time
+upper_tk = args.utk  # upper bound on avg mining time
+img_file = f"{args.img}.png"
+mode = args.mode
+zeta = args.conns/100
+mining_power_ratio = args.m_pow
+
+assert upper_tk >= lower_tk, "utk < ltk"
+assert 0 <= p_edge <= 1
+assert 0 <= p_invalid <= 1
+assert 0 <= z <= 1
+assert 0 <= zeta <= 1
+
+np.random.seed(seed)
+
+peers = {}  # will store adjacency lists, it is a dictionary of lists
+rho = {}  # stores speed of light propagation delay, accessed as rho[i,j]
+c = {}  # stores link speed, used as c[i,j]
+# stores mean of exponential dist for queuing delay, used as d_mean[i,j]
+d_mean = {}
+nodes = []  # stores nodes of the network
+block_no = 0  # id for blocks
+txn_no = 0  # id for txns
+curr_time = 0  # current time in the simulation
+
+
 def coin_flip(p):
     """Generates 1 with p probabilty"""
     rand_num = np.random.random()
@@ -417,7 +481,8 @@ class Event:
                 else:
                     # if adversary, add to blockchain.private chain
                     nodes[rec].blockchain.private.append(self.blk.blkID)
-                    print(f"{curr_time:.2f} : Adversary {rec} mined - {self.blk.blkID}", file=sys.stderr)
+                    lead = len(nodes[rec].blockchain.private)
+                    print(f"{curr_time:.2f} : Adversary {rec} mined - {self.blk.blkID} lead: {lead}", file=sys.stderr)
 
                 # create a new mining event
                 # TODO : will see if required later
@@ -497,20 +562,17 @@ class Event:
                 if (lead > 0):
                     # If honest miners have matched adversary's first block
                     if (nodes[rec].blockchain.block_depth[self.blk.blkID] == nodes[rec].blockchain.block_depth[nodes[rec].blockchain.private[0]]):
-                        print(lead)
                         blk = nodes[rec].blockchain.block_info[nodes[rec].blockchain.private.pop(0)]
-                        print(f"{curr_time:.2f} : Adversary {rec} reveals a block - {blk.blkID}", file=sys.stderr)
+                        print(f"{curr_time:.2f} : Adversary {rec} reveals a block - {blk.blkID} lead : {lead -1}", file=sys.stderr)
                         # publish first block
                         for peer in peers[rec]:
                             if(peer == sen):
                                 continue
                             event_queue.add_event(curr_time + get_latency(rec, peer, blk.size),
                                                 Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))
-                        if(nodes[rec].type == Mode.selfish):
-                            print('Hi')
-                        if (lead == 2 and nodes[rec].type == Mode.selfish):
+                        if (lead == 2 and nodes[rec].type == Mode.selfish.value):
                             blk = nodes[rec].blockchain.block_info[nodes[rec].blockchain.private.pop(0)]
-                            print(f"{curr_time:.2f} : Adversary {rec} reveals a second block - {blk.blkID}", file=sys.stderr)
+                            print(f"{curr_time:.2f} : Adversary {rec} reveals a second block - {blk.blkID} lead : {lead -2}", file=sys.stderr)
                             # publish second block also when lead is 2
                             for peer in peers[rec]:
                                 if(peer == sen):
@@ -707,57 +769,6 @@ def find_ratio():
     # print('Slow nodes:', num_slow)
 
     
-
-parser = ArgumentParser()
-parser.add_argument("--nodes",help="nodes in P2P network",default=10,type=int)
-parser.add_argument("--z",help="probability of each node being fast",default=0.5,type=float)
-parser.add_argument("--edge",help="probability of each edge being present or absent",default=0.3,type=float)
-parser.add_argument("--invalid",help="probability of each block being invalid",default=0.1,type=float)
-parser.add_argument("--Ttx",help="mean time for txn gen",default=5,type=float)
-parser.add_argument("--sim_time",help="maximum simulation time",default=1000,type=float)
-parser.add_argument("--seed",help="seed for random functions",default=0,type=int)
-parser.add_argument("--ltk",help="lower bound on Tk",default=120,type=float)
-parser.add_argument("--utk",help="upper bound on Tk",default=300,type=float)
-parser.add_argument("--img",help="output image name, png images are generated",default="img",type=str)
-parser.add_argument("--mode",help="Mode for selfish or stubborn mining",default=0,type=int,choices=[0,1,2])
-parser.add_argument("--conns",help="Percentage connections for selfish/stubborn mining",default=25.0,type=float)
-
-args = parser.parse_args()
-print(f"Arguments received : {args}")
-
-# Parameters
-n = args.nodes  # number of nodes in P2P network
-z = args.z # probability that a node is fast
-p_edge = args.edge  # probability with which edge is drawn between two nodes
-p_invalid = args.invalid  # probability of each block being invalid
-seed = args.seed  # seed for random functions
-Ttx = args.Ttx  # mean time for transaction generation
-total_sim_time = args.sim_time   # total time the simulation will run
-compile_time = time.time()
-lower_tk = args.ltk  # lower bound on avg mining time
-upper_tk = args.utk  # upper bound on avg mining time
-img_file = f"{args.img}.png"
-mode = args.mode
-zeta = args.conns/100
-
-assert upper_tk >= lower_tk, "utk < ltk"
-assert 0 <= p_edge <= 1
-assert 0 <= p_invalid <= 1
-assert 0 <= z <= 1
-assert 0 <= zeta <= 1
-
-np.random.seed(seed)
-
-peers = {}  # will store adjacency lists, it is a dictionary of lists
-rho = {}  # stores speed of light propagation delay, accessed as rho[i,j]
-c = {}  # stores link speed, used as c[i,j]
-# stores mean of exponential dist for queuing delay, used as d_mean[i,j]
-d_mean = {}
-nodes = []  # stores nodes of the network
-block_no = 0  # id for blocks
-txn_no = 0  # id for txns
-curr_time = 0  # current time in the simulation
-
 event_queue = Event_Queue()  # Event Queue for storing and executing all events
 
 for i in range(n):  # node objects are assigned to each node id
@@ -771,7 +782,7 @@ else:
     # create fast adversary
     nodes[-1].type = mode
     nodes[-1].is_fast = True
-    nodes[-1].alpha = lower_tk / 2
+    nodes[-1].alpha = lower_tk / mining_power_ratio
     arr = np.random.choice(n-1,int(zeta*(n-1)))
     peers[n-1] = []
     # connect to zeta*(n-1) honest miners
