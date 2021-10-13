@@ -17,6 +17,10 @@ class Event_type(Enum):
     rec_blk = 3
     broadcast_invalid_block = 4
 
+class Mode(Enum):
+    normal = 0
+    selfish = 1
+    stubborn = 2
 
 # constants
 MINING_FEES = 50
@@ -42,12 +46,12 @@ def dfs(i, visited):
             dfs(j, visited)
 
 
-def gen_graph():
+def gen_graph(n):
     """
     Samples the random graph for P2P network
     Algo:
     i) Connect each pair with p_edge probabilty
-    ii) Connect the graph by running a dfs and making edge between dfs roots
+    ii) If the graph is not connected, run the function again
     """
     global peers
     for i in range(n):
@@ -256,6 +260,7 @@ class Node:
         self.rec_txn = {}                 # Dict of txn to sender
         self.rec_blk = {}                 # Dict of blk to sender
         self.toa = {}                     # Dictionary of Block ID mapped to time of arrival
+        self.type = Mode.normal       
 
 
 class BlockChain:
@@ -274,10 +279,11 @@ class BlockChain:
         #  which mining will take place ##
         # blocks whose parents are not in the blockchain
         self.orphans = []
+        self.private = []
 
     def add_block(self, blk):
         """
-        Adds block to blockchain is its parent exists in the chain already
+        Adds block to blockchain if its parent exists in the chain already
         Otherwise adds to orphans
         If successfully added, checks for orphans to add
         Checks validity here for blocks in chain
@@ -323,6 +329,7 @@ class BlockChain:
                     return False
             balance[txn.receiver] += txn.amount
         return True
+
 
 
 class Event:
@@ -402,15 +409,20 @@ class Event:
                 nodes[rec].blockchain.add_block(self.blk)
                 nodes[rec].rec_blk[self.blk.blkID] = -1
 
-                # broadcast the new block
-                for peer in peers[rec]:
-                    event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
-                                          Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
+                if (nodes[rec].type == Mode.normal):
+                    # broadcast the new block if you're honest
+                    for peer in peers[rec]:
+                        event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
+                                            Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
+                else:
+                    # if adversary, add to private chain
+                    nodes[rec].private.append(self.blk.blkID)
 
                 # create a new mining event
-                if(should_blk_invalid()):
-                    if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
-                        return
+                # TODO : will see if required later
+                # if(should_blk_invalid()):
+                #     if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
+                #         return
 
                 # Generate a valid blk now
                 gen_valid_blk(rec)
@@ -472,11 +484,40 @@ class Event:
             nodes[rec].toa[self.blk.blkID] = curr_time
 
             # forward to peers
-            for peer in peers[rec]:
-                if(peer == sen):
-                    continue
-                event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
-                                      Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
+            if (nodes[rec].type == Mode.normal):
+                for peer in peers[rec]:
+                    if(peer == sen):
+                        continue
+                    event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
+                                        Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
+            else:
+                # Adversary has private blocks
+                lead = len(nodes[rec].private)
+
+                if (lead > 0):
+                    # If honest miners have matched adversary's first block
+                    if (nodes[rec].blockchain.block_depth[self.blk.blkID] == nodes[rec].blockchain.block_depth[nodes[rec].private[0]]):
+
+                        blk = nodes[rec].blockchain.block_info[nodes[rec].private.pop(0)]
+                        # publish first block
+                        for peer in peers[rec]:
+                            if(peer == sen):
+                                continue
+                            event_queue.add_event(curr_time + get_latency(rec, peer, blk.size),
+                                                Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))
+
+                        if (lead == 2 and nodes[rec].type == Mode.selfish):
+                            blk = nodes[rec].blockchain.block_info[nodes[rec].private.pop(0)]
+                            # publish second block also when lead is 2
+                            for peer in peers[rec]:
+                                if(peer == sen):
+                                    continue
+                                event_queue.add_event(curr_time + get_latency(rec, peer, blk.size),
+                                                    Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))
+
+                        
+
+                        
 
             if(mining_block_changed):
                 new_mining_block = nodes[rec].blockchain.mining_block
@@ -502,9 +543,10 @@ class Event:
                     curr_block = nodes[rec].blockchain.block_info[curr_block].parent_blkID
 
                 # restart mining on the new mining block
-                if(should_blk_invalid()):
-                    if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
-                        return
+                # TODO
+                # if(should_blk_invalid()):
+                #     if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
+                #         return
 
                 # Generate a valid blk now
                 gen_valid_blk(rec)
@@ -669,7 +711,7 @@ def find_ratio():
 
 parser = ArgumentParser()
 parser.add_argument("--nodes",help="nodes in P2P network",default=10,type=int)
-parser.add_argument("--z",help="probability of each node being fast",default=0.7,type=float)
+parser.add_argument("--z",help="probability of each node being fast",default=0.5,type=float)
 parser.add_argument("--edge",help="probability of each edge being present or absent",default=0.3,type=float)
 parser.add_argument("--invalid",help="probability of each block being invalid",default=0.1,type=float)
 parser.add_argument("--Ttx",help="mean time for txn gen",default=5,type=float)
@@ -678,6 +720,8 @@ parser.add_argument("--seed",help="seed for random functions",default=0,type=int
 parser.add_argument("--ltk",help="lower bound on Tk",default=120,type=float)
 parser.add_argument("--utk",help="upper bound on Tk",default=300,type=float)
 parser.add_argument("--img",help="output image name, png images are generated",default="img",type=str)
+parser.add_argument("--mode",help="Mode for selfish or stubborn mining",default=Mode.normal,type=int,choices=[Mode.normal,Mode.selfish,Mode.stubborn])
+parser.add_argument("--conns",help="Percentage connections for selfish/stubborn mining",default=25.0,type=float)
 
 args = parser.parse_args()
 print(f"Arguments received : {args}")
@@ -694,11 +738,14 @@ compile_time = time.time()
 lower_tk = args.ltk  # lower bound on avg mining time
 upper_tk = args.utk  # upper bound on avg mining time
 img_file = f"{args.img}.png"
+mode = args.mode
+zeta = args.conns/100
 
 assert upper_tk >= lower_tk, "utk < ltk"
 assert 0 <= p_edge <= 1
 assert 0 <= p_invalid <= 1
 assert 0 <= z <= 1
+assert 0 <= zeta <= 1
 
 np.random.seed(seed)
 
@@ -714,11 +761,26 @@ curr_time = 0  # current time in the simulation
 
 event_queue = Event_Queue()  # Event Queue for storing and executing all events
 
-gen_graph()  # graph is sampled
 for i in range(n):  # node objects are assigned to each node id
     nodes.append(Node())
 for i in range(int(n*z)):
     nodes[i].is_fast = True
+if (mode == Mode.normal):
+    gen_graph(n)  # graph is sampled
+else:
+    gen_graph(n-1)
+    # create fast adversary
+    nodes[-1].type = mode
+    nodes[-1].is_fast = True
+
+    arr = np.random.choice(n-1,int(zeta*(n-1)))
+
+    # connect to zeta*(n-1) honest miners
+    for i in arr:
+        peers[i].append(n-1)
+        peers[n-1].append(i)
+    
+
 init_global_values()  # parameters for calculating latency are assigned
 gen_txn()
 for i in range(n):
