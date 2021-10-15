@@ -17,6 +17,13 @@ class Event_type(Enum):
     rec_blk = 3
     broadcast_invalid_block = 4
 
+class State(Enum):
+    zero = 0
+    one = 1
+    two = 2
+    many = 3
+    zero_dash = 4
+
 class Mode(Enum):
     normal = 0
     selfish = 1
@@ -44,8 +51,8 @@ parser.add_argument(
     "--sim_time", help="maximum simulation time", default=1000, type=float)
 parser.add_argument(
     "--seed", help="seed for random functions", default=0, type=int)
-parser.add_argument("--ltk", help="lower bound on Tk", default=120, type=float)
-parser.add_argument("--utk", help="upper bound on Tk", default=300, type=float)
+parser.add_argument("--ltk", help="lower bound on Tk", default=50, type=float)
+parser.add_argument("--utk", help="upper bound on Tk", default=100, type=float)
 parser.add_argument(
     "--img", help="output image name, png images are generated", default="img", type=str)
 parser.add_argument("--mode", help="Mode for selfish or stubborn mining",
@@ -324,7 +331,8 @@ class Node:
         self.rec_txn = {}                 # Dict of txn to sender
         self.rec_blk = {}                 # Dict of blk to sender
         self.toa = {}                     # Dictionary of Block ID mapped to time of arrival
-        self.type = Mode.normal       
+        self.type = Mode.normal.value
+        self.state = State.zero     
 
 
 class BlockChain:
@@ -473,7 +481,7 @@ class Event:
                 nodes[rec].blockchain.add_block(self.blk)
                 nodes[rec].rec_blk[self.blk.blkID] = -1
 
-                if (nodes[rec].type == Mode.normal):
+                if (nodes[rec].type == Mode.normal.value):
                     # broadcast the new block if you're honest
                     for peer in peers[rec]:
                         event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
@@ -482,7 +490,24 @@ class Event:
                     # if adversary, add to blockchain.private chain
                     nodes[rec].blockchain.private.append(self.blk.blkID)
                     lead = len(nodes[rec].blockchain.private)
-                    print(f"{curr_time:.2f} : Adversary {rec} mined - {self.blk.blkID} lead: {lead}", file=sys.stderr)
+                    print(
+                        f"{curr_time:.2f} : Adversary {rec} mined - {self.blk.blkID} lead: {lead}", file=sys.stderr)
+                    if(nodes[rec].type == Mode.selfish.value):
+                        if(nodes[rec].state == State.zero):
+                            nodes[rec].state = State.one
+                        elif(nodes[rec].state == State.one):
+                            nodes[rec].state = State.two
+                        elif(nodes[rec].state == State.two):
+                            nodes[rec].state = State.many
+                        elif(nodes[rec].state == State.zero_dash):
+                            # if adversary was in 0' state, it should reveal the newly mined block immediately
+                            nodes[rec].state = State.zero
+                            nodes[rec].blockchain.private.pop(0)
+                            print(
+                                f"{curr_time:.2f} : Adversary {rec} reveals a block - {self.blk.blkID} lead : {lead -1}", file=sys.stderr)
+                            for peer in peers[rec]:
+                                event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
+                                                    Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
                 # create a new mining event
                 # TODO : will see if required later
@@ -550,7 +575,7 @@ class Event:
             nodes[rec].toa[self.blk.blkID] = curr_time
 
             # forward to peers
-            if (nodes[rec].type == Mode.normal):
+            if (nodes[rec].type == Mode.normal.value):
                 for peer in peers[rec]:
                     if(peer == sen):
                         continue
@@ -570,15 +595,26 @@ class Event:
                                 continue
                             event_queue.add_event(curr_time + get_latency(rec, peer, blk.size),
                                                 Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))
+
+                        #change state if selfish miner
+                        if(nodes[rec].type == Mode.selfish.value):
+                            if(nodes[rec].state == State.one):
+                                nodes[rec].state = State.zero_dash
+                            elif(nodes[rec].state == State.two):
+                                nodes[rec].state = State.zero
+                            elif(lead == 3):
+                                nodes[rec].state = State.two
                         if (lead == 2 and nodes[rec].type == Mode.selfish.value):
+                            # publish second block also when lead is 2
                             blk = nodes[rec].blockchain.block_info[nodes[rec].blockchain.private.pop(0)]
                             print(f"{curr_time:.2f} : Adversary {rec} reveals a second block - {blk.blkID} lead : {lead -2}", file=sys.stderr)
-                            # publish second block also when lead is 2
                             for peer in peers[rec]:
                                 if(peer == sen):
                                     continue
                                 event_queue.add_event(curr_time + get_latency(rec, peer, blk.size),
-                                                    Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))                     
+                                                    Event(Event_type.rec_blk, rec, peer, txn=None, blk=blk))
+                elif(nodes[rec].type == Mode.selfish.value and nodes[rec].state == State.zero_dash and mining_block_changed):
+                    nodes[rec].state = State.zero
                         
             if(mining_block_changed):
                 new_mining_block = nodes[rec].blockchain.mining_block
@@ -641,12 +677,12 @@ def finish_simulation():
                 f.write("\n")
 
 
-def make_graph():
+def make_graph(node_num):
     """
     It is the visualisation tool for the blockchains formed at the end of simulation
     """
     g = Graph()
-    bchain = nodes[0].blockchain
+    bchain = nodes[node_num].blockchain
     for k in bchain.block_info.keys():
         g.add_vertex(name=f"{k}", label=k if k != -1 else "G")
 
@@ -775,7 +811,7 @@ for i in range(n):  # node objects are assigned to each node id
     nodes.append(Node())
 for i in range(int(n*z)):
     nodes[i].is_fast = True
-if (mode == Mode.normal):
+if (mode == Mode.normal.value):
     gen_graph(n)  # graph is sampled
 else:
     gen_graph(n-1)
@@ -797,5 +833,7 @@ for i in range(n):
     gen_valid_blk(i)
 event_queue.execute_event_queue()
 finish_simulation()
-# make_graph()
+# make_graph(0)
+# if(mode != Mode.normal.value):
+#     make_graph(n-1)
 # find_ratio()
