@@ -60,7 +60,7 @@ parser.add_argument("--mode", help="Mode for selfish or stubborn mining",
 parser.add_argument(
     "--conns", help="Percentage connections for selfish/stubborn mining", default=25.0, type=float)
 
-parser.add_argument("--m_pow", help= "Mining power of adversary is m_pow times that of honest miner", default = 5, type = float)
+parser.add_argument("--mpow", help= "Mining power of adversary is m_pow times that of honest miner with high mining power", default = 5, type = float)
 
 args = parser.parse_args()
 print(f"Arguments received : {args}")
@@ -76,10 +76,10 @@ total_sim_time = args.sim_time   # total time the simulation will run
 compile_time = time.time()
 lower_tk = args.ltk  # lower bound on avg mining time
 upper_tk = args.utk  # upper bound on avg mining time
-img_file = f"{args.img}.png"
+img_file = args.img
 mode = args.mode
 zeta = args.conns/100
-mining_power_ratio = args.m_pow
+mining_power_ratio = args.mpow
 
 assert upper_tk >= lower_tk, "utk < ltk"
 assert 0 <= p_edge <= 1
@@ -99,6 +99,8 @@ block_no = 0  # id for blocks
 txn_no = 0  # id for txns
 curr_time = 0  # current time in the simulation
 miner_count = {}     # counts number of honest miners mining on an adversary's block
+adv = None
+
 
 def coin_flip(p):
     """Generates 1 with p probabilty"""
@@ -257,7 +259,6 @@ def print_balance(nodeID):
     for i in range(n):
         print(f"\tNode {i} : {balance[i]} coins",file=sys.stderr)
 
-
 # Structs
 
 
@@ -308,6 +309,13 @@ class Block:
     def __repr__(self):
 
         return f"BlkID: {self.blkID}; Parent : {self.parent_blkID}; Txns : {self.txns}"
+
+    def creator(self):
+        id = self.blkID
+        if (id == -1):
+            return -1
+        else:
+            return self.txns[0].receiver
 
     def log_data(self, depth, toa=None):
         if (self.blkID == -1):
@@ -401,8 +409,6 @@ class BlockChain:
                     return False
             balance[txn.receiver] += txn.amount
         return True
-
-
 
 class Event:
     def __init__(self, type, sender, rec, txn=None, blk=None):
@@ -671,13 +677,14 @@ def make_graph(node_num):
     root = g.vs.find(name="-1")
     style = {}
     style["vertex_size"] = 10
+    style["vertex_color"] = ["green" if k.creator() != adv else "red" for k in bchain.block_info.values()]
     style["vertex_label_dist"] = 1.5
     style["vertex_label_size"] = 10
     style["layout"] = g.layout_reingold_tilford(root=[root.index])
     style["bbox"] = (800,800)
     plot(g,**style)
-    # plot(g, img_file, **style)
-    style["target"] = ax
+    plot(g, f"{img_file}_{node_num}.png", **style)
+    # style["target"] = ax
     # plot(g, **style)
     # plt.show()
 
@@ -714,15 +721,16 @@ if (mode == Mode.normal.value):
 else:
     gen_graph(n-1)
     # create fast adversary
-    nodes[-1].type = mode
-    nodes[-1].is_fast = True
-    nodes[-1].alpha = lower_tk / mining_power_ratio
+    adv = n-1
+    nodes[adv].type = mode
+    nodes[adv].is_fast = True
+    nodes[adv].alpha = lower_tk / mining_power_ratio
     arr = np.random.choice(n-1,int(zeta*(n-1)))
-    peers[n-1] = []
+    peers[adv] = []
     # connect to zeta*(n-1) honest miners
     for i in arr:
-        peers[i].append(n-1)
-        peers[n-1].append(i)
+        peers[i].append(adv)
+        peers[adv].append(i)
     
 
 init_global_values()  # parameters for calculating latency are assigned
@@ -732,6 +740,6 @@ for i in range(n):
 event_queue.execute_event_queue()
 finish_simulation()
 make_graph(0)
-# if(mode != Mode.normal.value):
-#     make_graph(n-1)
+if(mode != Mode.normal.value):
+    make_graph(adv)
 # find_ratio()
