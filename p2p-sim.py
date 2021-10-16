@@ -697,19 +697,23 @@ def find_ratio():
     num_adv_total = 0
     num_main = 0
     num_total = 0
-    for _,v in nodes[n-1].blockchain.block_info.items():
-        if(v.blkID == -1):
-            continue
-        num_total += 1
-        if(v.txns[0].receiver == n-1):
-            num_adv_total += 1
-    mb = nodes[n-1].blockchain.mining_block
-    while(mb != -1):
-        num_main += 1
-        if(nodes[n-1].blockchain.block_info[mb].txns[0].receiver == n-1):
-            num_adv_main += 1
-        mb = nodes[0].blockchain.block_info[mb].parent_blkID
-    return (0 if num_adv_total == 0 else num_adv_main/num_adv_total, 0 if num_total == 0 else num_main/num_total)
+    if (adv is not None):
+        for _,v in nodes[adv].blockchain.block_info.items():
+            if(v.blkID == -1):
+                continue
+            num_total += 1
+            if(v.creator() == adv):
+                num_adv_total += 1
+        mb = nodes[adv].blockchain.mining_block
+        while(mb != -1):
+            num_main += 1
+            if(nodes[adv].blockchain.block_info[mb].creator() == adv):
+                num_adv_main += 1
+            mb = nodes[adv].blockchain.block_info[mb].parent_blkID
+        r1, r2 = (0 if num_adv_total == 0 else num_adv_main/num_adv_total, 0 if num_total == 0 else num_main/num_total)
+
+        print(f"MPU adversary = {r1:.2f}")
+        print(f"MPU all = {r2:.2f}")
     
 event_queue = Event_Queue()  # Event Queue for storing and executing all events
 
@@ -739,7 +743,7 @@ for i in range(n):
     gen_valid_blk(i)
 event_queue.execute_event_queue()
 finish_simulation()
-make_graph(0)
-if(mode != Mode.normal.value):
-    make_graph(adv)
-# find_ratio()
+# make_graph(0)
+# if(mode != Mode.normal.value):
+#     make_graph(adv)
+find_ratio()
