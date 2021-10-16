@@ -99,7 +99,7 @@ block_no = 0  # id for blocks
 txn_no = 0  # id for txns
 curr_time = 0  # current time in the simulation
 miner_count = {}     # counts number of honest miners mining on an adversary's block
-adv = None
+adv = None if mode == Mode.normal.value else n-1
 
 
 def coin_flip(p):
@@ -672,7 +672,7 @@ def make_graph(node_num):
             continue
         g.add_edge(f"{k}", f"{v.parent_blkID}")
 
-    _, ax = plt.subplots()
+    # _, ax = plt.subplots()
 
     root = g.vs.find(name="-1")
     style = {}
@@ -721,11 +721,10 @@ if (mode == Mode.normal.value):
 else:
     gen_graph(n-1)
     # create fast adversary
-    adv = n-1
     nodes[adv].type = mode
     nodes[adv].is_fast = True
     nodes[adv].alpha = lower_tk / mining_power_ratio
-    arr = np.random.choice(n-1,int(zeta*(n-1)))
+    arr = np.random.choice(n-1,int(zeta*(n-1)),replace=False)
     peers[adv] = []
     # connect to zeta*(n-1) honest miners
     for i in arr:
