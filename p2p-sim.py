@@ -743,7 +743,7 @@ for i in range(n):
     gen_valid_blk(i)
 event_queue.execute_event_queue()
 finish_simulation()
-# make_graph(0)
-# if(mode != Mode.normal.value):
-#     make_graph(adv)
+make_graph(0)
+if(mode != Mode.normal.value):
+    make_graph(adv)
 find_ratio()
