@@ -556,7 +556,7 @@ class Event:
             # add toa
             nodes[rec].toa[self.blk.blkID] = curr_time
 
-            # forward to peers
+            # forward to peers if honest miner
             if (nodes[rec].type == Mode.normal.value):
                 for peer in peers[rec]:
                     if(peer == sen):
@@ -568,6 +568,7 @@ class Event:
                 if(mining_block_changed and mode != Mode.normal.value and self.blk.txns[0].receiver == n-1):
                     miner_count[self.blk.blkID]+=1
 
+            # adversary
             else:
                 # Adversary has private blocks
                 lead = len(nodes[rec].blockchain.private)
