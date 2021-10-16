@@ -38,7 +38,7 @@ INVALID_BLOCK_FREQ = 50
 
 parser = ArgumentParser()
 parser.add_argument("--nodes", help="nodes in P2P network",
-                    default=10, type=int)
+                    default=50, type=int)
 parser.add_argument(
     "--z", help="probability of each node being fast", default=0.5, type=float)
 parser.add_argument(
@@ -51,8 +51,8 @@ parser.add_argument(
     "--sim_time", help="maximum simulation time", default=1000, type=float)
 parser.add_argument(
     "--seed", help="seed for random functions", default=0, type=int)
-parser.add_argument("--ltk", help="lower bound on Tk", default=50, type=float)
-parser.add_argument("--utk", help="upper bound on Tk", default=100, type=float)
+parser.add_argument("--lower", help="lower bound on Tk", default=150, type=float)
+parser.add_argument("--upper", help="upper bound on Tk", default=300, type=float)
 parser.add_argument(
     "--img", help="output image name, png images are generated", default="img", type=str)
 parser.add_argument("--mode", help="Mode for selfish or stubborn mining",
@@ -74,8 +74,8 @@ seed = args.seed  # seed for random functions
 Ttx = args.Ttx  # mean time for transaction generation
 total_sim_time = args.sim_time   # total time the simulation will run
 compile_time = time.time()
-lower_tk = args.ltk  # lower bound on avg mining time
-upper_tk = args.utk  # upper bound on avg mining time
+lower_tk = args.lower  # lower bound on avg mining time
+upper_tk = args.upper  # upper bound on avg mining time
 img_file = args.img
 mode = args.mode
 zeta = args.conns/100
