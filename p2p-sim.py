@@ -98,7 +98,7 @@ nodes = []  # stores nodes of the network
 block_no = 0  # id for blocks
 txn_no = 0  # id for txns
 curr_time = 0  # current time in the simulation
-
+miner_count = {}     # counts number of honest miners mining on an adversary's block
 
 def coin_flip(p):
     """Generates 1 with p probabilty"""
@@ -489,9 +489,15 @@ class Event:
                 else:
                     # if adversary, add to blockchain.private chain
                     nodes[rec].blockchain.private.append(self.blk.blkID)
+
+                    # count adversary as a miner on their block
+                    miner_count[self.blk.blkID] = 1
+
                     lead = len(nodes[rec].blockchain.private)
                     print(
                         f"{curr_time:.2f} : Adversary {rec} mined - {self.blk.blkID} lead: {lead}", file=sys.stderr)
+                    
+                    # change state in case of selfish miner
                     if(nodes[rec].type == Mode.selfish.value):
                         if(nodes[rec].state == State.zero):
                             nodes[rec].state = State.one
@@ -500,7 +506,7 @@ class Event:
                         elif(nodes[rec].state == State.two):
                             nodes[rec].state = State.many
                         elif(nodes[rec].state == State.zero_dash):
-                            # if adversary was in 0' state, it should reveal the newly mined block immediately
+                            # if selfish adversary was in 0' state, it should reveal the newly mined block immediately
                             nodes[rec].state = State.zero
                             nodes[rec].blockchain.private.pop(0)
                             print(
@@ -509,42 +515,12 @@ class Event:
                                 event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
                                                     Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
-                # create a new mining event
-                # TODO : will see if required later
-                # if(should_blk_invalid()):
-                #     if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
-                #         return
 
                 # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
                 # print(colored(
                 #     f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
-                return
-
-        elif(self.type == Event_type.broadcast_invalid_block):
-
-            # Check if longest chain, otherwise trivially terminated
-            if (self.blk.parent_blkID == nodes[rec].blockchain.mining_block):
-
-                # print(colored(
-                #     f"{curr_time:.2f} : Node {rec} -> Peers {peers[rec]} , Invalid Blk {self.blk.blkID} generated - {self.blk}", "blue"), file=sys.stderr)
-                # print_balance(rec)
-
-                for peer in peers[rec]:
-                    event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
-                                        Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
-
-                # create a new mining event
-                if(should_blk_invalid()):
-                    if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
-                        return
-
-                # Generate a valid blk now
-                gen_valid_blk(rec)
-            else:
-                # print(colored(
-                    # f"{curr_time:.2f} : Terminated bad mined blk {self.blk.blkID} at Node {rec}, new leaf block is {nodes[rec].blockchain.mining_block} - {self.blk}", "yellow"), file=sys.stderr)
                 return
 
         else:  # block received event
@@ -581,6 +557,11 @@ class Event:
                         continue
                     event_queue.add_event(curr_time + get_latency(rec, peer, self.blk.size),
                                         Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
+
+                # if this honest miner is mining on the adversary's block, count it in the map
+                if(mining_block_changed and mode != Mode.normal.value and self.blk.txns[0].receiver == n-1):
+                    miner_count[self.blk.blkID]+=1
+
             else:
                 # Adversary has private blocks
                 lead = len(nodes[rec].blockchain.private)
@@ -639,12 +620,6 @@ class Event:
                             nodes[rec].unused.pop(txn_it.txnID)
                     curr_block = nodes[rec].blockchain.block_info[curr_block].parent_blkID
 
-                # restart mining on the new mining block
-                # TODO
-                # if(should_blk_invalid()):
-                #     if (gen_invalid_blk(rec)):  # An invalid blk was actually generated
-                #         return
-
                 # Generate a valid blk now
                 gen_valid_blk(rec)
             else:
@@ -701,109 +676,32 @@ def make_graph(node_num):
     style["layout"] = g.layout_reingold_tilford(root=[root.index])
     style["bbox"] = (800,800)
     plot(g,**style)
-    plot(g, img_file, **style)
+    # plot(g, img_file, **style)
     style["target"] = ax
-    plot(g, **style)
-    plt.show()
+    # plot(g, **style)
+    # plt.show()
 
 def find_ratio():
     """
     It outputs the various ratios as the result of simulation
     """
-    ratio = [0 for _ in range(n)]
-    total_gen = [0 for _ in range(n)]
-    long_gen = [0 for _ in range(n)]
-    for k,v in nodes[0].blockchain.block_info.items():
+    num_adv_main = 0
+    num_adv_total = 0
+    num_main = 0
+    num_total = 0
+    for _,v in nodes[n-1].blockchain.block_info.items():
         if(v.blkID == -1):
             continue
-        total_gen[v.txns[0].receiver]+= 1
-    mb = nodes[0].blockchain.mining_block
-    sb = sum(total_gen)
+        num_total += 1
+        if(v.txns[0].receiver == n-1):
+            num_adv_total += 1
+    mb = nodes[n-1].blockchain.mining_block
     while(mb != -1):
-        long_gen[nodes[0].blockchain.block_info[mb].txns[0].receiver]+= 1
+        num_main += 1
+        if(nodes[n-1].blockchain.block_info[mb].txns[0].receiver == n-1):
+            num_adv_main += 1
         mb = nodes[0].blockchain.block_info[mb].parent_blkID
-    num_low = 0
-    num_high = 0
-    low_rat_avg = 0
-    high_rat_avg = 0
-    low_avg = 0
-    high_avg = 0
-    num_slow = 0
-    num_fast = 0
-    slow_rat_avg = 0
-    fast_rat_avg = 0
-    slow_avg = 0
-    fast_avg = 0
-    for i in range(n):
-        if(nodes[i].is_fast):
-            fast_rat_avg+=total_gen[i]
-            num_fast += 1
-            if(total_gen[i]!=0):
-                fast_avg += long_gen[i] / total_gen[i]
-        else:
-            slow_rat_avg += total_gen[i]
-            num_slow += 1
-            if(total_gen[i] != 0):
-                slow_avg += long_gen[i] / total_gen[i]
-
-        if(nodes[i].alpha == upper_tk):
-            low_rat_avg+= total_gen[i]
-            num_low += 1
-            if(total_gen[i] != 0):
-                low_avg += long_gen[i] / total_gen[i]
-        else:
-            high_rat_avg += total_gen[i]
-            num_high += 1
-            if(total_gen[i] != 0):
-                high_avg += long_gen[i] / total_gen[i]
-    # print('High cpu power fraction of block in longest chain:', high_avg/num_high)
-    # print('Low cpu power fraction of block in longest chain:', low_avg/num_low)
-    # print('High cpu power fraction of total blocks:', high_rat_avg/sb)
-    # print('Low cpu power fraction of total blocks:', low_rat_avg/sb)
-    # print('Fast node fraction of block in longest chain:', fast_avg/num_fast)
-    # print('Slow node fraction of block in longest chain:', slow_avg/num_slow)
-    # print('Fast node fraction of total blocks:', fast_rat_avg/sb)
-    # print('Slow node fraction of total blocks:', slow_rat_avg/sb)
-    # print('Total blocks:', sb)
-    # print('Len longest chain:', sum(long_gen))
-    
-    all_blocks = {}
-    leaf_blocks = {}
-    for k,v in nodes[0].blockchain.block_info.items():
-        all_blocks[v.blkID] = 0
-        leaf_blocks[v.blkID] = 1
-        
-
-    all_blocks[-1] = 1
-    leaf_blocks[-1] = 1
-    mb = nodes[0].blockchain.mining_block
-    while(mb != -1):
-        all_blocks[mb]=1
-        mb = nodes[0].blockchain.block_info[mb].parent_blkID
-
-    num_forks = 0
-    for k,v in nodes[0].blockchain.block_info.items():
-        leaf_blocks[v.parent_blkID] = 0
-        if(all_blocks[v.parent_blkID] == 1 and all_blocks[v.blkID]==0):
-            num_forks+=1
-    
-    num_branches = 0
-    branch_length = 0
-    for k,v in nodes[0].blockchain.block_info.items():
-        if(leaf_blocks[v.blkID]==1 and all_blocks[v.blkID]==0):
-            x = v.blkID
-            num_branches+=1
-            while(not(all_blocks[x])):
-                branch_length+=1
-                x = nodes[0].blockchain.block_info[x].parent_blkID
-    
-    # print('Total Number of Forks:', num_forks)
-    # print('Average Length of Branches:', branch_length/num_branches)
-    # print('High CPU nodes:', num_high)
-    # print('Low CPU nodes:', num_low)
-    # print('Fast nodes:', num_fast)
-    # print('Slow nodes:', num_slow)
-
+    return (0 if num_adv_total == 0 else num_adv_main/num_adv_total, 0 if num_total == 0 else num_main/num_total)
     
 event_queue = Event_Queue()  # Event Queue for storing and executing all events
 
@@ -833,7 +731,7 @@ for i in range(n):
     gen_valid_blk(i)
 event_queue.execute_event_queue()
 finish_simulation()
-# make_graph(0)
+make_graph(0)
 # if(mode != Mode.normal.value):
 #     make_graph(n-1)
 # find_ratio()
