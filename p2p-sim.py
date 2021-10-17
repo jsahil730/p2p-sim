@@ -273,8 +273,7 @@ class Event_Queue:
     def execute_event_queue(self):
         global curr_time
         while(len(self.queue)):
-            (t, e) = self.queue[0]
-            self.queue = self.queue[1:]
+            (t, e) = self.queue.pop(0)
             if(t > total_sim_time):
                 return
             curr_time = t
@@ -572,8 +571,10 @@ class Event:
                 # Adversary has private blocks
                 lead = len(nodes[rec].blockchain.private)
                 if (lead > 0):
+                    if (self.blk.blkID not in nodes[rec].blockchain.block_depth):
+                        return
                     # If honest miners have matched adversary's first block
-                    if (nodes[rec].blockchain.block_depth[self.blk.blkID] == nodes[rec].blockchain.block_depth[nodes[rec].blockchain.private[0]]):
+                    if (nodes[rec].blockchain.block_depth[self.blk.blkID] >= nodes[rec].blockchain.block_depth[nodes[rec].blockchain.private[0]]):
                         blk = nodes[rec].blockchain.block_info[nodes[rec].blockchain.private.pop(0)]
                         print(f"{curr_time:.2f} : Adversary {rec} reveals a block - {blk.blkID} lead : {lead -1}", file=sys.stderr)
                         # publish first block
