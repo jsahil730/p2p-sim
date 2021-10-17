@@ -9,7 +9,10 @@ Need to have python3.7 or higher installed.
 After having installed `pip`, the python dependencies can be installed as `pip3 install -r ./requirements.txt`
 
 ## Running the code
-After having installed all dependencies, the code can simply be run as `python3 p2p-sim.py` or `./p2p-sim.py` which outputs certain logging information to `stderr` and at the end of the simulation, block-dumps are created in files named `i.log` where `i` is the number referring to `i`-th node, `i` is indexed from `0`. Also the blockchain tree at the end is saved in a png image.
+After having installed all dependencies, the code can simply be run as `python3 p2p-sim.py` or `./p2p-sim.py`.
+To run the simulation with a selfish miner or a stubborn miner, the `mode` argument needs to be set as `1` and `2` respectively.
+
+Certain logging information is printed to scree and at the end of the simulation, block-dumps are created in files named `i.log` where `i` is the number referring to `i`-th node, `i` is indexed from `0`. Similarly, `i.png` files contain the blockchain trees for `i`-th node.
 
 ```
 usage: p2p-sim.py [-h] [--nodes NODES] [--z Z] [--edge EDGE] [--invalid INVALID] [--Ttx TTX] [--sim_time SIM_TIME] [--seed SEED] [--lower LOWER] [--upper UPPER]
