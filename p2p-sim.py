@@ -565,7 +565,7 @@ class Event:
                                         Event(Event_type.rec_blk, rec, peer, txn=None, blk=self.blk))
 
                 # if this honest miner is mining on the adversary's block, count it in the map
-                if(mining_block_changed and mode != Mode.normal.value and self.blk.txns[0].receiver == n-1):
+                if(mining_block_changed and mode != Mode.normal.value and self.blk.creator() == adv):
                     miner_count[self.blk.blkID]+=1
 
             # adversary
@@ -659,35 +659,36 @@ def finish_simulation():
                 f.write("\n")
 
 
-def make_graph(node_num):
+def make_graph(node_lst):
     """
     It is the visualisation tool for the blockchains formed at the end of simulation
     """
-    g = Graph()
-    bchain = nodes[node_num].blockchain
-    for k in bchain.block_info.keys():
-        g.add_vertex(name=f"{k}", label=k if k != -1 else "G")
+    for node_num in node_lst:
+        g = Graph()
+        bchain = nodes[node_num].blockchain
+        for k in bchain.block_info.keys():
+            g.add_vertex(name=f"{k}", label=k if k != -1 else "G")
 
-    for (k, v) in bchain.block_info.items():
-        if (k == -1):
-            continue
-        g.add_edge(f"{k}", f"{v.parent_blkID}")
+        for (k, v) in bchain.block_info.items():
+            if (k == -1):
+                continue
+            g.add_edge(f"{k}", f"{v.parent_blkID}")
 
-    # _, ax = plt.subplots()
+        # _, ax = plt.subplots()
 
-    root = g.vs.find(name="-1")
-    style = {}
-    style["vertex_size"] = 10
-    style["vertex_color"] = ["green" if k.creator() != adv else "red" for k in bchain.block_info.values()]
-    style["vertex_label_dist"] = 1.5
-    style["vertex_label_size"] = 10
-    style["layout"] = g.layout_reingold_tilford(root=[root.index])
-    style["bbox"] = (800,800)
-    plot(g,**style)
-    plot(g, f"{img_file}_{node_num}.png", **style)
-    # style["target"] = ax
-    # plot(g, **style)
-    # plt.show()
+        root = g.vs.find(name="-1")
+        style = {}
+        style["vertex_size"] = 10
+        style["vertex_color"] = ["green" if k.creator() != adv else "red" for k in bchain.block_info.values()]
+        style["vertex_label_dist"] = 1.5
+        style["vertex_label_size"] = 10
+        style["layout"] = g.layout_reingold_tilford(root=[root.index])
+        style["bbox"] = (800,800)
+        plot(g,**style)
+        plot(g, f"{img_file}_{node_num}.png", **style)
+        # style["target"] = ax
+        # plot(g, **style)
+        # plt.show()
 
 def find_ratio():
     """
@@ -743,7 +744,8 @@ for i in range(n):
     gen_valid_blk(i)
 event_queue.execute_event_queue()
 finish_simulation()
-make_graph(0)
-if(mode != Mode.normal.value):
-    make_graph(adv)
+lst = [0]
+if (mode != Mode.normal.value):
+    lst.append(adv)
+make_graph(lst)
 find_ratio()
