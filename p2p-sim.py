@@ -391,8 +391,7 @@ class BlockChain:
             for orphan in orphans_copy:
                 if(orphan.parent_blkID == blk.blkID):
                     self.orphans.remove(orphan)
-                    mining_block_changed = mining_block_changed or self.add_block(
-                        orphan)[0]
+                    mining_block_changed = self.add_block(orphan)[0] or mining_block_changed
 
         else:
             self.orphans.append(blk)
@@ -640,7 +639,7 @@ def finish_simulation():
     """
     logs = os.listdir()
     for i in logs:
-        if (i.endswith(".log")):
+        if (i.endswith(".log")) or (i.endswith(".png")):
             os.remove(i)
     
     for i in range(len(nodes)):
@@ -684,7 +683,7 @@ def make_graph(node_lst):
         style["vertex_label_size"] = 10
         style["layout"] = g.layout_reingold_tilford(root=[root.index])
         style["bbox"] = (800,800)
-        plot(g,**style)
+        # plot(g,**style)
         plot(g, f"{img_file}_{node_num}.png", **style)
         # style["target"] = ax
         # plot(g, **style)
@@ -744,8 +743,8 @@ for i in range(n):
     gen_valid_blk(i)
 event_queue.execute_event_queue()
 finish_simulation()
-lst = [0]
-if (mode != Mode.normal.value):
-    lst.append(adv)
+lst = [i for i in range(n)]
+# if (mode != Mode.normal.value):
+#     lst.append(adv)
 make_graph(lst)
 find_ratio()
