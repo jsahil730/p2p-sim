@@ -666,29 +666,30 @@ def make_graph(node_lst):
     for node_num in node_lst:
         g = Graph()
         bchain = nodes[node_num].blockchain
-        for k in bchain.block_info.keys():
+        pairs = bchain.block_info.items()
+        
+        for (k,v) in pairs:
             g.add_vertex(name=f"{k}", label=k if k != -1 else "G")
 
-        for (k, v) in bchain.block_info.items():
-            if (k == -1):
-                continue
-            g.add_edge(f"{k}", f"{v.parent_blkID}")
-
-        # _, ax = plt.subplots()
+        for (k, v) in pairs:
+            if (k != -1):
+                g.add_edge(f"{k}", f"{v.parent_blkID}")
 
         root = g.vs.find(name="-1")
         style = {}
         style["vertex_size"] = 10
-        style["vertex_color"] = ["green" if k.creator() != adv else "red" for k in bchain.block_info.values()]
+        style["vertex_color"] = ["green" for _ in pairs]
+        for (i,(k,v)) in enumerate(pairs):
+            if (adv is not None):
+                if (v.creator() == adv):
+                    style["vertex_color"][i] = "red"
+                if (k in nodes[adv].blockchain.private):
+                    style["vertex_color"][i] = "blue"
         style["vertex_label_dist"] = 1.5
         style["vertex_label_size"] = 10
         style["layout"] = g.layout_reingold_tilford(root=[root.index])
         style["bbox"] = (800,800)
-        # plot(g,**style)
         plot(g, f"{img_file}_{node_num}.png", **style)
-        # style["target"] = ax
-        # plot(g, **style)
-        # plt.show()
 
 def find_ratio():
     """
